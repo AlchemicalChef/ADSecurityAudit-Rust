@@ -1,3 +1,30 @@
+/**
+ * Domain Admin Equivalence Audit Component
+ *
+ * Detects and displays "shadow admins" - accounts that have Domain Admin
+ * equivalent privileges through indirect attack paths, misconfigurations,
+ * or overlooked permissions.
+ *
+ * @module components/da-equivalence-audit
+ *
+ * Attack Paths Detected:
+ * - DCSync rights (DS-Replication-Get-Changes-All)
+ * - Password reset capabilities on privileged accounts
+ * - WriteDACL/WriteOwner on domain objects
+ * - Unconstrained delegation abuse
+ * - Shadow credentials (msDS-KeyCredentialLink)
+ * - ADCS certificate template vulnerabilities (ESC1-ESC8)
+ * - Exchange PrivExchange attacks
+ * - RBCD (Resource-Based Constrained Delegation) misconfiguration
+ *
+ * Display Features:
+ * - Categorized findings by attack type
+ * - Risk level indicators with severity badges
+ * - Collapsible detail sections for each finding
+ * - Remediation recommendations with PowerShell commands
+ *
+ * @see https://bloodhound.readthedocs.io/ - BloodHound attack path analysis
+ */
 "use client"
 
 import { useState } from "react"

@@ -1,3 +1,40 @@
+/**
+ * Domain Security Audit Component
+ *
+ * Performs comprehensive security analysis of domain-level settings
+ * and configurations in Active Directory.
+ *
+ * @module components/domain-security-audit
+ *
+ * Security Areas Analyzed:
+ * - Domain Functional Level: Feature support and security implications
+ * - Password Policy: Complexity, history, maximum age requirements
+ * - Fine-Grained Password Policies (FGPPs): Per-group settings
+ * - Account Lockout Policy: Threshold, duration, observation window
+ * - Kerberos Policy: Ticket lifetimes, renewal settings
+ *
+ * Domain Features Checked:
+ * - Protected Users group presence and membership
+ * - LDAP signing requirements
+ * - SMB signing requirements
+ * - LDAP channel binding
+ * - Credential Guard compatibility
+ *
+ * Findings Generated:
+ * - Outdated domain functional level
+ * - Weak password requirements
+ * - No account lockout policy
+ * - Long Kerberos ticket lifetimes
+ * - Missing security features
+ *
+ * Recommendations:
+ * - Domain functional level upgrade guidance
+ * - Password policy hardening
+ * - Kerberos hardening best practices
+ * - Protected Users group usage
+ *
+ * @see https://docs.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/configuring-additional-lsa-protection
+ */
 "use client"
 
 import type React from "react"

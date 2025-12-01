@@ -1,7 +1,49 @@
+//! Security Incident Management Module
+//!
+//! Provides data structures and workflows for tracking and responding to
+//! security incidents discovered during Active Directory audits.
+//!
+//! # Incident Lifecycle
+//!
+//! ```text
+//! Open → Investigating → Contained → Resolved → Closed
+//! ```
+//!
+//! # Priority Levels
+//!
+//! | Priority | Response Time | Description |
+//! |----------|---------------|-------------|
+//! | Critical | Immediate | Active attack, data breach, domain compromise |
+//! | High | < 4 hours | Significant vulnerability, privileged account abuse |
+//! | Medium | < 24 hours | Security misconfiguration, policy violation |
+//! | Low | < 72 hours | Minor finding, informational |
+//!
+//! # Usage
+//!
+//! Incidents are automatically created when critical security findings are detected,
+//! or can be manually created by security analysts during investigation.
+//!
+//! ```rust,ignore
+//! let incident = Incident::new(
+//!     "DCSync Rights Detected".to_string(),
+//!     "Non-admin user has DCSync capability".to_string(),
+//!     IncidentPriority::Critical,
+//!     vec!["DC01.corp.local".to_string()],
+//! );
+//!
+//! incident.add_action(
+//!     "Containment".to_string(),
+//!     "Removed DCSync ACE from user".to_string(),
+//! );
+//! ```
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Priority classification for security incidents
+///
+/// Determines response urgency and escalation paths
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IncidentPriority {
     Critical,

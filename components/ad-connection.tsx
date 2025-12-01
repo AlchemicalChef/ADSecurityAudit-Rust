@@ -1,3 +1,30 @@
+/**
+ * Active Directory Connection Component
+ *
+ * Manages LDAP/LDAPS connection state and provides connection status
+ * display with reconnection capabilities.
+ *
+ * @module components/ad-connection
+ *
+ * Features:
+ * - Connection status indicator (connected, disconnected, error)
+ * - Server address and port display
+ * - Active domain information
+ * - Reconnect functionality
+ * - Connection error details
+ *
+ * Connection States:
+ * - Connected: Active LDAP session established
+ * - Disconnected: No active session
+ * - Error: Connection failed with error message
+ *
+ * Security Indicators:
+ * - LDAPS (port 636) vs LDAP (port 389) detection
+ * - TLS status display
+ * - Bind DN information
+ *
+ * @see components/domain-selector for domain switching
+ */
 "use client"
 
 import { useState, useEffect } from "react"

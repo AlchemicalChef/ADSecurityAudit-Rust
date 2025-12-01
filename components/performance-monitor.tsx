@@ -1,3 +1,36 @@
+/**
+ * Performance Monitor Component
+ *
+ * Displays real-time performance metrics for audit operations including
+ * query execution times, throughput, and resource utilization.
+ *
+ * @module components/performance-monitor
+ *
+ * Metrics Tracked:
+ * - Query execution time (min, max, average)
+ * - Operations per second throughput
+ * - Active connection count
+ * - Memory usage
+ * - CPU utilization
+ *
+ * Operation Statistics:
+ * - Total operations executed
+ * - Successful vs failed ratio
+ * - Parallel efficiency score
+ * - Queue depth
+ *
+ * Performance Alerts:
+ * - Slow query warnings (>5 seconds)
+ * - Connection pool exhaustion
+ * - Memory pressure indicators
+ * - Timeout occurrences
+ *
+ * Optimization Recommendations:
+ * - Query batching suggestions
+ * - Parallelization opportunities
+ * - Cache effectiveness analysis
+ * - Connection pool tuning
+ */
 "use client"
 
 import { useState, useEffect, useCallback } from "react"

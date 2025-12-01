@@ -1,3 +1,34 @@
+/**
+ * Advanced Features Type Definitions
+ *
+ * TypeScript interfaces mirroring Rust backend structures for
+ * advanced platform features including audit logging, risk scoring,
+ * anomaly detection, and caching.
+ *
+ * @module lib/advanced-features-types
+ *
+ * Type Categories:
+ *
+ * Audit Logging:
+ * - AuditEntry: Individual log entries with severity and category
+ * - ComplianceStandard: SOC2, HIPAA, PCI-DSS, GDPR, ISO27001
+ *
+ * Risk Scoring:
+ * - RiskScore: Calculated risk with category breakdown
+ * - RiskLevel: Critical, High, Medium, Low, Info
+ *
+ * Anomaly Detection:
+ * - Anomaly: Detected behavioral anomaly with evidence
+ * - BehavioralBaseline: Learned normal behavior patterns
+ *
+ * Caching:
+ * - CacheStats: Hit rate, size, eviction metrics
+ * - CacheEntry: Cached data with TTL tracking
+ *
+ * These types ensure type safety across the frontend-backend boundary
+ * and enable IDE autocompletion for all API responses.
+ */
+
 // TypeScript types for IRP Platform Advanced Features
 // Mirrors Rust backend structures for audit logging, risk scoring, anomaly detection, and cache
 

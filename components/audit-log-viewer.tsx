@@ -1,3 +1,41 @@
+/**
+ * Audit Log Viewer Component
+ *
+ * Displays security audit logs with filtering, searching, and export
+ * capabilities for compliance and forensic analysis.
+ *
+ * @module components/audit-log-viewer
+ *
+ * Log Entry Types:
+ * - User searches and queries
+ * - Security scans and audits
+ * - Account modifications (disable, etc.)
+ * - KRBTGT rotation events
+ * - Connection events
+ * - Configuration changes
+ *
+ * Severity Levels:
+ * - Info: Normal operations
+ * - Warning: Unusual but expected events
+ * - Error: Operation failures
+ * - Critical: Security incidents
+ *
+ * Features:
+ * - Real-time log streaming
+ * - Date range filtering
+ * - Severity level filtering
+ * - Full-text search
+ * - Log entry details view
+ * - Export to CSV/JSON
+ *
+ * Compliance Support:
+ * - Tamper-evident logging (SHA-256 chain)
+ * - Timestamp with timezone
+ * - User attribution
+ * - Operation context preservation
+ *
+ * @see https://docs.microsoft.com/en-us/windows/security/threat-protection/auditing/security-auditing-overview
+ */
 "use client"
 
 import { useState, useEffect } from "react"

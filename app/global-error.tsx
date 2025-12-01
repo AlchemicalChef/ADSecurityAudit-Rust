@@ -1,3 +1,33 @@
+/**
+ * Global Error Page Component
+ *
+ * Next.js global error boundary for root-level error handling.
+ * Catches errors that occur in the root layout, including layout errors.
+ *
+ * @module app/global-error
+ *
+ * Purpose:
+ * This is the last line of defense for uncaught errors. It renders
+ * a complete HTML page since the root layout may have failed.
+ *
+ * Features:
+ * - Self-contained HTML (no layout dependencies)
+ * - Inline styles (CSS may not load if layout failed)
+ * - Error message display
+ * - Dismiss, retry, and reload options
+ *
+ * Recovery Options:
+ * - Dismiss: Hide error UI temporarily
+ * - Try Again: Attempt to re-render
+ * - Reload: Full application reload
+ *
+ * Notes:
+ * - Must provide <html> and <body> tags
+ * - Cannot use external CSS or components
+ * - Uses inline SVG for icons
+ *
+ * @see https://nextjs.org/docs/app/building-your-application/routing/error-handling#handling-errors-in-root-layouts
+ */
 'use client'
 
 import { useEffect, useState } from 'react'

@@ -1,3 +1,34 @@
+/**
+ * Application Settings Dialog Component
+ *
+ * Provides configuration options for the AD Security Scanner including
+ * connection settings, audit parameters, and user preferences.
+ *
+ * @module components/settings-dialog
+ *
+ * Settings Categories:
+ * - Connection: Default timeout, retry settings, TLS options
+ * - Auditing: Scan depth, concurrent queries, cache TTL
+ * - Display: Theme, notification preferences, dashboard layout
+ * - Export: Default formats, output paths, report templates
+ *
+ * Security Settings:
+ * - Credential storage options (session vs persistent)
+ * - LDAPS enforcement
+ * - Certificate validation mode
+ * - Audit log retention period
+ *
+ * Performance Settings:
+ * - Query batch size
+ * - Cache duration
+ * - Parallel operation limits
+ * - Progress update frequency
+ *
+ * Persistence:
+ * - Settings stored in encrypted SQLite database
+ * - Per-domain configuration support
+ * - Import/export capability
+ */
 "use client"
 
 import { useState } from "react"

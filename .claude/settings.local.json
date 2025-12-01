@@ -54,7 +54,14 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(cmd /c:*)",
       "Bash(del \"C:\\Users\\night\\Downloads\\IRP-Dev2\\Cargo.toml\")",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo tree:*)",
+      "Bash(cargo search:*)",
+      "Bash(del \"C:\\Users\\night\\Documents\\GitHub\\ADSecurityAudit-Rust\\tauri.conf.json\")",
+      "Bash(git checkout:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

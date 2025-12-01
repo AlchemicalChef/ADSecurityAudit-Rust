@@ -1,3 +1,93 @@
+//! Domain Admin Equivalence Audit Module
+//!
+//! Comprehensive detection of "shadow admins" - principals that have Domain Admin
+//! equivalent privileges through indirect attack paths, misconfigurations, or
+//! overlooked permissions.
+//!
+//! # What is Domain Admin Equivalence?
+//!
+//! A principal has "Domain Admin Equivalence" if they can gain Domain Admin
+//! privileges through exploitation, even without being a direct member of
+//! Domain Admins. These are often called "shadow admins" or "hidden admins".
+//!
+//! # Attack Paths Detected
+//!
+//! ## Direct Privilege Paths
+//!
+//! | Attack Path | Description | Risk |
+//! |-------------|-------------|------|
+//! | DCSync Rights | Can replicate domain credentials | Critical |
+//! | Password Reset on DA | Can reset Domain Admin passwords | Critical |
+//! | WriteDACL on Domain | Can grant self any domain rights | Critical |
+//! | WriteOwner on Domain | Can take domain ownership | Critical |
+//!
+//! ## Delegation Attacks
+//!
+//! | Attack Path | Description | Risk |
+//! |-------------|-------------|------|
+//! | Unconstrained Delegation | Collects TGTs, impersonate anyone | Critical |
+//! | Constrained to DC | Can impersonate to Domain Controller | Critical |
+//! | RBCD on DC | Configure delegation to Domain Controller | Critical |
+//!
+//! ## Credential Theft Paths
+//!
+//! | Attack Path | Description | Risk |
+//! |-------------|-------------|------|
+//! | Shadow Credentials | Write msDS-KeyCredentialLink for TGT | Critical |
+//! | Write SPN | Kerberoast to obtain service credentials | High |
+//! | Ghost Accounts | AdminCount=1 but not in protected group | Medium |
+//!
+//! ## AD Certificate Services (ADCS) Attacks
+//!
+//! | Attack Path | Description | Risk |
+//! |-------------|-------------|------|
+//! | ESC1 | Template allows subject alt name | Critical |
+//! | ESC2 | Any Purpose or No EKU template | Critical |
+//! | ESC3 | Enrollment Agent template abuse | Critical |
+//! | ESC4 | Write access to certificate template | Critical |
+//! | ESC5 | Write access to PKI objects | High |
+//! | ESC8 | NTLM relay to web enrollment | High |
+//!
+//! ## Infrastructure Control
+//!
+//! | Attack Path | Description | Risk |
+//! |-------------|-------------|------|
+//! | DNS Zone Control | Modify DNS to redirect traffic | High |
+//! | GPO Link Rights | Link malicious GPO to DCs | Critical |
+//! | OU Control (DC OU) | Modify Domain Controllers OU | Critical |
+//! | Computer Object Control | Modify DC computer objects | Critical |
+//! | Exchange PrivExchange | WriteDACL via Exchange groups | Critical |
+//!
+//! ## Sync Account Compromise
+//!
+//! | Attack Path | Description | Risk |
+//! |-------------|-------------|------|
+//! | Azure AD Connect | Has DCSync rights by design | Critical |
+//! | MSOL Account | Password stored in SQL, extractable | Critical |
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! let audit = DAEquivalenceAudit::new();
+//!
+//! // Analyze for shadow admin paths
+//! let results = client.analyze_da_equivalence().await?;
+//!
+//! // Results contain all detected attack paths
+//! for principal in results.equivalent_principals {
+//!     println!("Shadow Admin: {} via {} paths",
+//!         principal.principal,
+//!         principal.total_paths
+//!     );
+//! }
+//! ```
+//!
+//! # References
+//!
+//! - [BloodHound](https://github.com/BloodHoundAD/BloodHound) - Attack path analysis
+//! - [Certified Pre-Owned](https://posts.specterops.io/certified-pre-owned-d95910965cd2) - ADCS attacks
+//! - [Shadow Credentials](https://posts.specterops.io/shadow-credentials-abusing-key-trust-account-mapping-for-takeover-8ee1a53566ab)
+
 use serde::{Deserialize, Serialize};
 
 // ==========================================

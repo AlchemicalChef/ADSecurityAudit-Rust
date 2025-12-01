@@ -1,3 +1,35 @@
+/**
+ * Cache Statistics Monitor Component
+ *
+ * Real-time monitoring of the LDAP query cache performance to help
+ * optimize query patterns and reduce AD server load.
+ *
+ * @module components/cache-statistics-monitor
+ *
+ * Metrics Displayed:
+ * - Cache hit rate (percentage)
+ * - Total hits and misses
+ * - Cache size (entries and bytes)
+ * - Eviction count
+ * - Average entry age
+ *
+ * Cache Benefits:
+ * - Reduces LDAP server load
+ * - Speeds up repeated queries
+ * - Enables offline browsing of cached data
+ * - Reduces network traffic
+ *
+ * Configuration Options:
+ * - TTL (Time To Live) per cache type
+ * - Maximum cache size
+ * - Cache invalidation triggers
+ * - Warm-up strategies
+ *
+ * Performance Indicators:
+ * - Green: >80% hit rate - excellent
+ * - Yellow: 50-80% hit rate - good
+ * - Red: <50% hit rate - consider adjustments
+ */
 "use client"
 
 import { useState, useEffect } from "react"

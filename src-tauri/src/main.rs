@@ -26,6 +26,7 @@ mod advanced_cache;
 mod audit_log;
 mod risk_scoring;
 mod anomaly_detection;
+mod domain_discovery;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -1601,6 +1602,40 @@ async fn invalidate_advanced_cache(
     Ok(())
 }
 
+// ==========================================
+// Domain Discovery Commands
+// ==========================================
+
+/// Discover domain information from the current Windows environment
+#[tauri::command]
+async fn discover_local_domain() -> Result<domain_discovery::DiscoveredDomainInfo, String> {
+    info!("=== DOMAIN DISCOVERY REQUEST ===");
+
+    // Run the blocking Windows API calls on a separate thread
+    let result = tokio::task::spawn_blocking(|| {
+        domain_discovery::discover_domain()
+    })
+    .await
+    .map_err(|e| format!("Discovery task failed: {}", e))?;
+
+    info!("Discovery complete: domain_joined={}, dc={:?}",
+        result.is_domain_joined, result.domain_controller);
+
+    Ok(result)
+}
+
+/// Quick check if the machine is domain-joined
+#[tauri::command]
+async fn is_domain_joined() -> Result<bool, String> {
+    let result = tokio::task::spawn_blocking(|| {
+        domain_discovery::check_domain_joined()
+    })
+    .await
+    .map_err(|e| format!("Check failed: {}", e))?;
+
+    Ok(result)
+}
+
 fn main() {
     // Set up file logging to AD.log
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, fmt, EnvFilter};
@@ -1770,6 +1805,9 @@ fn main() {
             disable_cache_warming,
             cleanup_expired_cache,
             invalidate_advanced_cache,
+            // Domain discovery commands
+            discover_local_domain,
+            is_domain_joined,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

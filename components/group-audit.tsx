@@ -1,3 +1,34 @@
+/**
+ * Privileged Group Membership Audit Component
+ *
+ * Analyzes membership of privileged Active Directory groups to identify
+ * security issues such as excessive membership and stale accounts.
+ *
+ * @module components/group-audit
+ *
+ * Groups Analyzed:
+ * - Critical: Domain Admins, Enterprise Admins, Schema Admins, Administrators
+ * - Protected: Backup Operators, Account Operators, Server Operators
+ * - Service: DnsAdmins, Cert Publishers, Key Admins
+ *
+ * Issues Detected:
+ * - Excessive membership (exceeds recommended thresholds)
+ * - Nested groups in critical groups (obscures actual membership)
+ * - Disabled users still in privileged groups
+ * - Inactive users (no login > 90 days)
+ *
+ * Membership Thresholds:
+ * - Critical groups: Maximum 5 members recommended
+ * - Protected groups: Maximum 15 members recommended
+ *
+ * Best Practices Checked:
+ * - Direct membership only in Tier 0 groups
+ * - Regular access reviews
+ * - Just-In-Time (JIT) privileged access
+ * - Automated offboarding cleanup
+ *
+ * @see https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory
+ */
 "use client"
 
 import { useState } from "react"

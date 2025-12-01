@@ -1,3 +1,44 @@
+/**
+ * Export Utilities Module
+ *
+ * Provides data export functionality for audit results in multiple
+ * formats suitable for compliance reporting and documentation.
+ *
+ * @module lib/export-utils
+ *
+ * Supported Formats:
+ * - PDF: Professional reports with headers, tables, and formatting
+ * - CSV: Spreadsheet-compatible tabular data
+ * - JSON: Machine-readable full data export
+ *
+ * Features:
+ * - Configurable column definitions
+ * - Metadata injection (timestamp, domain, record count)
+ * - Automatic filename generation
+ * - Browser download trigger
+ *
+ * PDF Capabilities:
+ * - Auto-table generation with column widths
+ * - Multi-page support with headers
+ * - Title and subtitle formatting
+ * - Metadata footer
+ *
+ * @example
+ * ```typescript
+ * import { exportToPDF, exportToCSV } from '@/lib/export-utils'
+ *
+ * const columns = [
+ *   { header: 'User', accessor: 'username' },
+ *   { header: 'Risk', accessor: 'riskLevel' }
+ * ]
+ *
+ * await exportToPDF(findings, columns, {
+ *   filename: 'security-audit',
+ *   title: 'AD Security Audit Report'
+ * })
+ * ```
+ */
+
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import Papa from 'papaparse'

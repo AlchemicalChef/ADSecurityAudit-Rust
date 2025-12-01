@@ -1,3 +1,35 @@
+/**
+ * Main Application Page
+ *
+ * Root page component for the AD Security Scanner application.
+ * Provides tabbed navigation between all major features.
+ *
+ * @module app/page
+ *
+ * Navigation Tabs:
+ * - Dashboard: Executive security overview with risk scoring
+ * - Users: User search and account management
+ * - KRBTGT: Password age analysis and rotation workflow
+ * - Privileged: Tier 0/1/2 account enumeration
+ * - AdminSDHolder: Protected account ACL analysis
+ * - Security: Domain-level policy auditing
+ * - GPO: Group Policy security review
+ * - Delegation: Kerberos delegation audit
+ * - Trusts: Domain trust security analysis
+ * - Permissions: Critical object ACL audit
+ * - Groups: Privileged group membership audit
+ * - DA Equivalence: Shadow admin detection
+ * - Risk Scoring: Aggregate security score
+ * - Anomalies: Behavioral anomaly detection
+ * - Audit Log: Security event history
+ * - Performance: System metrics monitoring
+ * - Cache: Query cache statistics
+ *
+ * State Management:
+ * - Connection status propagated to all child components
+ * - Theme preference persisted
+ * - Settings accessible via dialog
+ */
 "use client"
 
 import { useState } from "react"

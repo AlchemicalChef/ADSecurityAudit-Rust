@@ -1,3 +1,29 @@
+/**
+ * Audit Filters Component
+ *
+ * Provides filtering and search controls for audit findings and
+ * security assessment results.
+ *
+ * @module components/audit-filters
+ *
+ * Filter Options:
+ * - Text search across all fields
+ * - Severity level (Critical, High, Medium, Low)
+ * - Category (Privileged Access, Delegation, Permissions, etc.)
+ * - Date range
+ * - Affected object type (User, Group, Computer, GPO)
+ *
+ * Features:
+ * - Real-time filtering as you type
+ * - Combined filter application
+ * - Filter presets (Critical only, Last 24 hours, etc.)
+ * - Clear all filters button
+ * - Filter state persistence
+ *
+ * Usage:
+ * Applied across dashboard, audit views, and export dialogs
+ * to provide consistent filtering experience.
+ */
 'use client'
 
 import { useState } from 'react'

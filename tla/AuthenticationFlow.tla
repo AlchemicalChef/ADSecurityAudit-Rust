@@ -8,7 +8,7 @@
 (* SecureString lifecycle with guaranteed zeroization on drop.             *)
 (*                                                                          *)
 (* Based on:                                                                 *)
-(*   - src-tauri/src/ad_client.rs (lines 115-300)                          *)
+(*   - src-tauri/src/ad_client.rs (impl ActiveDirectoryClient, line 114+)  *)
 (*   - src-tauri/src/secure_types.rs (SecureString)                        *)
 (****************************************************************************)
 

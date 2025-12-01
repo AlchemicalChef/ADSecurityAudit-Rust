@@ -1,3 +1,34 @@
+/**
+ * Domain Trust Security Audit Component
+ *
+ * Analyzes Active Directory domain and forest trust relationships for
+ * security vulnerabilities that could enable cross-domain attacks.
+ *
+ * @module components/domain-trust-audit
+ *
+ * Trust Types Analyzed:
+ * - External Trusts: Single domain, highest risk without SID filtering
+ * - Forest Trusts: Entire forest access, requires selective authentication
+ * - Parent-Child: Internal forest trusts, generally lower risk
+ * - Shortcut Trusts: Performance optimization, verify necessity
+ * - Realm Trusts: Kerberos realm, special security considerations
+ *
+ * Critical Security Controls:
+ * - SID Filtering (Quarantine): Blocks SID history injection attacks
+ * - Selective Authentication: Restricts cross-forest authentication
+ *
+ * Vulnerabilities Detected:
+ * - CRITICAL: SID filtering disabled on external trusts
+ * - HIGH: Forest trust without selective authentication
+ * - MEDIUM: Bidirectional trust (expanded attack surface)
+ * - LOW: Stale trust configuration
+ *
+ * Attack Scenarios:
+ * - SID History Injection: Forge privileged SIDs from trusted domain
+ * - Forest-wide compromise via overly permissive trusts
+ *
+ * @see https://attack.mitre.org/techniques/T1134/005/ - SID-History Injection
+ */
 "use client"
 
 import { useState, useEffect } from "react"

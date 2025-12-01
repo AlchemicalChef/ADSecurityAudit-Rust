@@ -20,8 +20,23 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Server, ChevronDown, Plus, Trash2, CheckCircle, Circle, AlertCircle } from "lucide-react"
+import { Server, ChevronDown, Plus, Trash2, CheckCircle, Circle, AlertCircle, Wand2, Loader2 } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
+
+interface DiscoveredDomainInfo {
+  is_domain_joined: boolean
+  domain_name: string | null
+  netbios_name: string | null
+  current_user: string | null
+  current_user_upn: string | null
+  domain_controller: string | null
+  dc_ip_address: string | null
+  forest_name: string | null
+  site_name: string | null
+  suggested_base_dn: string | null
+  suggested_server: string | null
+  warnings: string[]
+}
 
 interface DomainInfo {
   id: number
@@ -49,8 +64,11 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
   const [domains, setDomains] = useState<DomainInfo[]>([])
   const [activeDomain, setActiveDomain] = useState<DomainInfo | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showDiscoveryPrompt, setShowDiscoveryPrompt] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [discovering, setDiscovering] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [discoveredInfo, setDiscoveredInfo] = useState<DiscoveredDomainInfo | null>(null)
 
   const [newDomain, setNewDomain] = useState<AddDomainForm>({
     name: "",
@@ -62,7 +80,57 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
 
   useEffect(() => {
     loadDomains()
+    checkForDiscoveryPrompt()
   }, [])
+
+  // Check if we should show the discovery prompt on startup
+  const checkForDiscoveryPrompt = async () => {
+    try {
+      const allDomains = await invoke<DomainInfo[]>("get_all_domains")
+      if (allDomains.length === 0) {
+        // No domains configured - check if machine is domain-joined
+        const isDomainJoined = await invoke<boolean>("is_domain_joined")
+        if (isDomainJoined) {
+          setShowDiscoveryPrompt(true)
+        }
+      }
+    } catch (err) {
+      console.error("Failed to check discovery prompt:", err)
+    }
+  }
+
+  // Run domain discovery
+  const handleDiscovery = async () => {
+    setDiscovering(true)
+    setError(null)
+
+    try {
+      const discovered = await invoke<DiscoveredDomainInfo>("discover_local_domain")
+      setDiscoveredInfo(discovered)
+
+      if (discovered.is_domain_joined) {
+        // Auto-fill the form with discovered values
+        setNewDomain({
+          name: discovered.netbios_name || discovered.domain_name || "",
+          server: discovered.suggested_server || "",
+          username: discovered.current_user_upn || discovered.current_user || "",
+          password: "", // User must always enter password
+          base_dn: discovered.suggested_base_dn || "",
+        })
+
+        // Close discovery prompt if open, open add dialog
+        setShowDiscoveryPrompt(false)
+        setShowAddDialog(true)
+      } else {
+        setError("This machine is not joined to a domain. Please enter domain details manually.")
+      }
+    } catch (err) {
+      setError(`Discovery failed: ${err}`)
+      console.error("Domain discovery failed:", err)
+    } finally {
+      setDiscovering(false)
+    }
+  }
 
   const loadDomains = async () => {
     try {
@@ -260,6 +328,44 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
             </DialogDescription>
           </DialogHeader>
 
+          {/* Auto-Discover Button */}
+          <div className="flex items-center gap-2 rounded-lg border border-dashed p-3">
+            <Wand2 className="h-5 w-5 text-muted-foreground" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Auto-Discover Domain</p>
+              <p className="text-xs text-muted-foreground">
+                Automatically detect domain settings from your Windows environment
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDiscovery}
+              disabled={discovering}
+            >
+              {discovering ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Discovering...
+                </>
+              ) : (
+                "Discover"
+              )}
+            </Button>
+          </div>
+
+          {/* Show discovery warnings if any */}
+          {discoveredInfo && discoveredInfo.warnings.length > 0 && (
+            <div className="rounded-lg bg-yellow-500/10 p-3 text-sm text-yellow-600 dark:text-yellow-400">
+              <p className="font-medium">Discovery Warnings:</p>
+              <ul className="mt-1 list-inside list-disc text-xs">
+                {discoveredInfo.warnings.map((warning, idx) => (
+                  <li key={idx}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="name">Domain Name</Label>
@@ -328,6 +434,7 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
               onClick={() => {
                 setShowAddDialog(false)
                 setError(null)
+                setDiscoveredInfo(null)
               }}
               disabled={loading}
             >
@@ -335,6 +442,87 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
             </Button>
             <Button onClick={handleAddDomain} disabled={loading}>
               {loading ? "Connecting..." : "Add Domain"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Discovery Prompt Dialog - Shows on startup when no domains and machine is domain-joined */}
+      <Dialog open={showDiscoveryPrompt} onOpenChange={setShowDiscoveryPrompt}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5" />
+              Domain Detected
+            </DialogTitle>
+            <DialogDescription>
+              Your computer appears to be joined to an Active Directory domain.
+              Would you like to auto-discover and connect to your domain?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-4">
+            <div className="rounded-lg bg-muted p-4">
+              <div className="flex items-start gap-3">
+                <Wand2 className="mt-0.5 h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium">Auto-Discover Domain</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Automatically detect your domain controller, base DN, and username
+                    from your Windows environment. You&apos;ll only need to enter your password.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDiscoveryPrompt(false)
+                setError(null)
+              }}
+              disabled={discovering}
+              className="w-full sm:w-auto"
+            >
+              Skip
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDiscoveryPrompt(false)
+                setShowAddDialog(true)
+                setError(null)
+              }}
+              disabled={discovering}
+              className="w-full sm:w-auto"
+            >
+              Manual Setup
+            </Button>
+            <Button
+              onClick={handleDiscovery}
+              disabled={discovering}
+              className="w-full sm:w-auto"
+            >
+              {discovering ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Discovering...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="mr-2 h-4 w-4" />
+                  Auto-Discover
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

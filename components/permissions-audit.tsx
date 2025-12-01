@@ -1,3 +1,36 @@
+/**
+ * Active Directory Permissions Audit Component
+ *
+ * Audits Access Control Lists (ACLs) on critical AD objects to detect
+ * dangerous permissions that could enable privilege escalation.
+ *
+ * @module components/permissions-audit
+ *
+ * Critical Objects Analyzed:
+ * - AdminSDHolder container (template for protected accounts)
+ * - Domain root naming context
+ * - Domain Controllers OU
+ * - Schema partition
+ * - Configuration partition
+ *
+ * Dangerous Permissions Detected:
+ * - GenericAll: Full control over the object
+ * - WriteDacl: Can modify permissions (grant self full access)
+ * - WriteOwner: Can take ownership (then modify permissions)
+ * - GenericWrite: Can modify most attributes
+ * - Extended Rights: DCSync, password reset, etc.
+ *
+ * Enterprise Key Admins Bug:
+ * Detects the Windows Server 2016+ misconfiguration where EKA is
+ * granted GenericAll instead of scoped msDS-KeyCredentialLink access.
+ *
+ * Remediation Guidance:
+ * - Provides PowerShell commands for ACL modifications
+ * - References ADSIEdit procedures
+ * - Lists affected GUIDs for extended rights
+ *
+ * @see https://posts.specterops.io/the-unintended-risks-of-trusting-active-directory-7e26f17e2c25
+ */
 "use client"
 
 import { useState, useEffect } from "react"

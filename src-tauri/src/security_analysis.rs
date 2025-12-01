@@ -1,3 +1,43 @@
+//! Security Analysis Module for AdminSDHolder and ACL Auditing
+//!
+//! Provides comprehensive analysis of Windows Security Descriptors and Access Control Lists
+//! with a focus on identifying privilege escalation risks and security misconfigurations.
+//!
+//! # Key Features
+//!
+//! - **AdminSDHolder Analysis**: Audits the template ACL that propagates to all protected accounts
+//! - **ACE Risk Assessment**: Evaluates each Access Control Entry for dangerous permissions
+//! - **Trustee Risk Detection**: Identifies when risky principals have elevated access
+//! - **Extended Rights Analysis**: Detects dangerous capabilities like DCSync, password reset
+//! - **Recommendation Generation**: Produces actionable security remediation steps
+//!
+//! # AdminSDHolder Background
+//!
+//! AdminSDHolder is a special container in Active Directory whose ACL serves as a template
+//! for all protected accounts (Domain Admins, Enterprise Admins, etc.). The Security Descriptor
+//! Propagator (SDProp) process copies this ACL to protected accounts every 60 minutes.
+//!
+//! Any misconfiguration here affects ALL privileged accounts in the domain.
+//!
+//! # Risk Levels
+//!
+//! - **Critical**: Immediate action required - full control, DCSync, ownership
+//! - **High**: Significant risk - write permissions, dangerous extended rights
+//! - **Medium**: Moderate risk - self-modification, deletion capabilities
+//! - **Low**: Minor concern - read-only elevated access
+//! - **Info**: Informational - standard expected permissions
+//!
+//! # Dangerous Permissions Detected
+//!
+//! | Permission | Risk | Impact |
+//! |------------|------|--------|
+//! | GenericAll | Critical | Full control over protected accounts |
+//! | WriteDacl | Critical | Can grant self full access |
+//! | WriteOwner | Critical | Can take ownership |
+//! | DS-Replication-Get-Changes-All | Critical | DCSync attack capability |
+//! | GenericWrite | High | Modify most attributes |
+//! | User-Force-Change-Password | Critical | Reset any protected account password |
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -1,3 +1,47 @@
+//! Privileged Account Management and Risk Assessment
+//!
+//! Comprehensive analysis of privileged accounts in Active Directory environments,
+//! implementing Microsoft's tiered administration model and security best practices.
+//!
+//! # Microsoft Tier Model
+//!
+//! This module implements the recommended three-tier administrative model:
+//!
+//! | Tier | Description | Risk Level | Examples |
+//! |------|-------------|------------|----------|
+//! | Tier 0 | Domain/Forest Admin | Highest | Domain Admins, Enterprise Admins, Schema Admins |
+//! | Tier 1 | Server Administration | High | Account Operators, Backup Operators, Server Operators |
+//! | Tier 2 | Workstation Administration | Moderate | Remote Desktop Users, local admins |
+//!
+//! # Features
+//!
+//! - **Group Enumeration**: Identifies all privileged groups with risk scoring
+//! - **Account Analysis**: Detailed assessment of each privileged account
+//! - **Risk Factor Detection**: Identifies dangerous configurations (stale passwords, SPNs, etc.)
+//! - **Nested Group Resolution**: Traces indirect privilege grants through group nesting
+//! - **Recommendation Engine**: Generates actionable security recommendations
+//!
+//! # Risk Factors Detected
+//!
+//! - Password never expires on privileged accounts
+//! - Service accounts with Domain Admin privileges
+//! - Disabled accounts still in privileged groups
+//! - Tier 0 accounts not protected by AdminSDHolder
+//! - Kerberoastable SPNs on privileged accounts
+//! - Excessive privilege accumulation (multiple admin groups)
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! let summary = client.get_privileged_accounts_summary().await?;
+//! println!("Tier 0 accounts: {}", summary.total_tier0_accounts);
+//! println!("Risk level: {:?}", summary.risk_level);
+//!
+//! for rec in summary.recommendations {
+//!     println!("[{:?}] {}: {}", rec.priority, rec.title, rec.description);
+//! }
+//! ```
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

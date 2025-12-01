@@ -1,3 +1,22 @@
+/**
+ * Root Layout Component
+ *
+ * Next.js root layout providing HTML structure, metadata, and global styles.
+ * This component wraps all pages in the application.
+ *
+ * @module app/layout
+ *
+ * Metadata:
+ * - Title: ADSecurityScanner
+ * - Description: Active Directory Security Scanner
+ * - Icons: Light/dark mode aware favicons
+ *
+ * Global Features:
+ * - Font configuration (sans-serif)
+ * - CSS reset via globals.css
+ * - Theme-aware icon switching
+ */
+
 import type { Metadata } from 'next'
 import './globals.css'
 

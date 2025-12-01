@@ -1,3 +1,60 @@
+//! Privileged Group Membership Audit Module
+//!
+//! Analyzes Active Directory privileged groups for security issues including
+//! excessive membership, nested groups, and stale accounts.
+//!
+//! # Security Best Practices
+//!
+//! ## Membership Thresholds
+//!
+//! | Group Type | Recommended Max | Rationale |
+//! |------------|-----------------|-----------|
+//! | Critical (DA, EA, SA) | 5 | Minimal attack surface |
+//! | Protected Groups | 15 | Limited but operational |
+//! | Delegated Groups | Varies | Based on business need |
+//!
+//! ## Critical Groups (Tier 0)
+//!
+//! - **Domain Admins**: Full control over the domain
+//! - **Enterprise Admins**: Full control over the forest
+//! - **Schema Admins**: Can modify AD schema (irreversible)
+//! - **Administrators**: Built-in admin group on DCs
+//!
+//! ## Protected Groups (AdminSDHolder)
+//!
+//! These groups have their ACL reset every 60 minutes by SDProp:
+//! - Domain Admins, Enterprise Admins, Schema Admins
+//! - Administrators, Backup Operators, Account Operators
+//! - Server Operators, Print Operators, DnsAdmins
+//! - Domain Controllers, Cert Publishers, Key Admins
+//!
+//! # Issues Detected
+//!
+//! | Issue | Severity | Impact |
+//! |-------|----------|--------|
+//! | Excessive membership | Critical/High | Larger attack surface |
+//! | Nested groups in DA/EA | High | Hidden privilege paths |
+//! | Disabled users in groups | Medium | Should be cleaned up |
+//! | Inactive users (>90 days) | Medium | Stale privileged access |
+//!
+//! # Why Nested Groups Are Dangerous
+//!
+//! Nested groups in critical privileged groups:
+//! - Obscure actual membership - hard to audit
+//! - Create "choke points" for privilege escalation
+//! - Complicate access review and revocation
+//! - May include users unintentionally
+//!
+//! **Best Practice**: Direct membership only in Tier 0 groups
+//!
+//! # Remediation Strategies
+//!
+//! 1. Implement Just-In-Time (JIT) privileged access
+//! 2. Use Privileged Access Management (PAM) solutions
+//! 3. Create role-based delegation instead of DA membership
+//! 4. Conduct quarterly privileged access reviews
+//! 5. Automate removal of disabled users from groups
+
 use serde::{Deserialize, Serialize};
 
 // ==========================================

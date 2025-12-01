@@ -9,7 +9,7 @@
 (*                                                                          *)
 (* Based on:                                                                 *)
 (*   - src-tauri/src/forest_manager.rs (ForestManager)                      *)
-(*   - src-tauri/src/main.rs (switch_domain, lines 1160-1198)              *)
+(*   - src-tauri/src/main.rs (switch_domain, line 1161)                    *)
 (****************************************************************************)
 
 EXTENDS Naturals, FiniteSets, Sequences, TLC
@@ -244,9 +244,10 @@ AuditsOnlyOnConfigured ==
     \A audit \in auditsInProgress : audit.domain \in configuredDomains
 
 \* Cannot have audits on disconnected domains
+\* BUG FIX: Audits should only run on Connected domains (not Connecting)
 AuditsOnlyOnConnected ==
     \A audit \in auditsInProgress :
-        domainStates[audit.domain] \in {"Connected", "Connecting"}
+        domainStates[audit.domain] = "Connected"
 
 \* BUG-5 DETECTION: Audit context should match active domain
 \* This invariant will be VIOLATED when the race condition occurs

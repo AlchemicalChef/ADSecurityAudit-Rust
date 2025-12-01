@@ -1,3 +1,56 @@
+//! KRBTGT Account Security Management
+//!
+//! The KRBTGT account is the most critical service account in Active Directory.
+//! It is used to encrypt and sign all Kerberos tickets (TGTs) in the domain.
+//!
+//! # Why KRBTGT Security Matters
+//!
+//! If the KRBTGT password hash is compromised, attackers can create **Golden Tickets** -
+//! forged Kerberos tickets that grant them access to any resource in the domain.
+//! This is one of the most devastating attack techniques against Active Directory.
+//!
+//! # Password Rotation Requirements
+//!
+//! - **Recommended rotation**: Every 180 days (6 months)
+//! - **Two rotations required**: Must rotate twice to fully invalidate existing tickets
+//! - **Wait period**: Minimum 10 hours between rotations (max TGT lifetime)
+//! - **Recommended wait**: 24 hours to ensure all tickets have expired
+//!
+//! # Rotation Process
+//!
+//! ```text
+//! 1. First Rotation
+//!    - Resets KRBTGT password
+//!    - Old tickets (N-1) can still be decrypted
+//!    - New tickets use new key (N)
+//!
+//! 2. Wait Period (10-24 hours)
+//!    - All existing TGTs expire naturally
+//!    - Services continue working with N-1 key
+//!
+//! 3. Second Rotation
+//!    - Resets KRBTGT again
+//!    - N-1 key is now invalidated
+//!    - Only current key (N+1) is valid
+//! ```
+//!
+//! # Risk Levels
+//!
+//! | Password Age | Risk Level | Action |
+//! |--------------|------------|--------|
+//! | 0-90 days | Healthy | No action needed |
+//! | 91-150 days | Low | Plan rotation |
+//! | 151-180 days | Medium | Schedule rotation |
+//! | 181-365 days | High | Rotate soon |
+//! | >365 days | Critical | Immediate rotation required |
+//!
+//! # Security Considerations
+//!
+//! - LDAPS (port 636) is **required** for password operations
+//! - Domain Admin or equivalent privileges needed
+//! - All operations are comprehensively audit-logged
+//! - New password is randomly generated (128 characters)
+
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

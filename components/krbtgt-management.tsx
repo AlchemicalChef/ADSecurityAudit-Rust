@@ -1,3 +1,34 @@
+/**
+ * KRBTGT Account Security Management Component
+ *
+ * Provides comprehensive management of the KRBTGT service account including
+ * password age analysis, rotation workflow, and security recommendations.
+ *
+ * @module components/krbtgt-management
+ *
+ * KRBTGT Background:
+ * The KRBTGT account is the Kerberos Key Distribution Center (KDC) service account.
+ * Its password hash is used to encrypt all Ticket Granting Tickets (TGTs) in the domain.
+ * If compromised, attackers can forge "Golden Tickets" for unlimited domain access.
+ *
+ * Password Rotation Process:
+ * 1. First rotation - Changes the active key, previous key remains valid
+ * 2. Wait period (10-24 hours) - Allows existing TGTs to expire naturally
+ * 3. Second rotation - Invalidates the previous key completely
+ *
+ * Key Features:
+ * - Password age monitoring with risk-based color coding
+ * - Two-phase rotation workflow with countdown timer
+ * - Pre-rotation checklist to ensure safe operations
+ * - Detailed audit logging of all rotation activities
+ *
+ * Security Considerations:
+ * - Requires LDAPS (port 636) for password operations
+ * - Domain Admin or equivalent privileges required
+ * - All operations logged for compliance
+ *
+ * @see https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/manage/ad-forest-recovery-resetting-the-krbtgt-password
+ */
 "use client"
 
 import { useState, useEffect } from "react"

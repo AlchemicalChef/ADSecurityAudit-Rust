@@ -1,3 +1,36 @@
+/**
+ * Anomaly Detection Panel Component
+ *
+ * Displays behavioral anomalies detected by the machine learning-inspired
+ * analytics engine, providing real-time security monitoring.
+ *
+ * @module components/anomaly-detection-panel
+ *
+ * Anomaly Types Displayed:
+ * - UnusualLogonTime: Activity outside normal hours
+ * - UnusualLogonLocation: Access from atypical IPs
+ * - PrivilegeEscalation: Addition to privileged groups
+ * - MassGroupChange: Bulk membership modifications
+ * - RapidFireLogons: Potential credential stuffing
+ * - SuspiciousQuery: Unusual LDAP query patterns
+ * - ConfigurationChange: Unexpected AD modifications
+ * - BruteForceAttempt: Multiple failed authentications
+ * - LateralMovement: Cross-system access patterns
+ *
+ * Severity Levels:
+ * - Critical: Likely security incident, immediate action required
+ * - High: Suspicious activity requiring prompt investigation
+ * - Medium: Unusual behavior warranting review
+ * - Low: Informational, routine monitoring
+ *
+ * Features:
+ * - Real-time anomaly feed with filtering
+ * - Confidence scores and deviation metrics
+ * - Evidence details for each detection
+ * - Recommended response actions
+ *
+ * @see https://docs.microsoft.com/en-us/defender-for-identity/suspicious-activity-guide
+ */
 "use client"
 
 import { useState, useEffect } from "react"

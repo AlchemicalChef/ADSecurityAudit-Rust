@@ -143,6 +143,7 @@ Next ==
         \/ CompletePhase1(d)
         \/ FailPhase1(d)
         \/ StartPhase2(d)
+        \/ AttemptPrematurePhase2(d)  \* BUG: Was missing - needed to detect premature attempts
         \/ CompletePhase2(d)
         \/ FailPhase2(d)
         \/ ResetRotation(d)
@@ -161,7 +162,15 @@ Spec == Init /\ [][Next]_vars /\ Fairness
 (* Safety Invariants                                                        *)
 (****************************************************************************)
 
-\* INV2: Phase 2 completion requires phase 1 complete + minimum wait
+\* INV2: Phase 2 START requires phase 1 complete + minimum wait
+\* This invariant will be VIOLATED by AttemptPrematurePhase2 action
+Phase2StartRequiresWait ==
+    \A d \in DOMAINS :
+        rotationPhase[d] = "Phase2InProgress" =>
+            /\ phase1Time[d] >= 0
+            /\ currentTime >= phase1Time[d] + MIN_WAIT_SECONDS
+
+\* INV2b: Phase 2 completion requires phase 1 complete + minimum wait
 Phase2RequiresPhase1AndWait ==
     \A d \in DOMAINS :
         rotationPhase[d] = "Phase2Complete" =>

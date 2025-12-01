@@ -1,3 +1,27 @@
+/**
+ * Error Page Component
+ *
+ * Next.js error boundary for route-level error handling.
+ * Displays when an error occurs within a specific route segment.
+ *
+ * @module app/error
+ *
+ * Features:
+ * - Error message display (development mode)
+ * - "Try Again" button for component re-render
+ * - "Reload App" button for full page refresh
+ * - Styled error UI consistent with app theme
+ *
+ * Error Logging:
+ * - Errors logged to console for debugging
+ * - Error digest available for error tracking
+ *
+ * Recovery Options:
+ * - reset(): Re-renders the error boundary children
+ * - reload(): Full page refresh via window.location
+ *
+ * @see https://nextjs.org/docs/app/building-your-application/routing/error-handling
+ */
 'use client'
 
 import { useEffect } from 'react'

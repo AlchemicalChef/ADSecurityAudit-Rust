@@ -1,3 +1,36 @@
+/**
+ * Security Incident Manager Component
+ *
+ * Provides incident tracking and workflow management for security events
+ * discovered during Active Directory audits.
+ *
+ * @module components/incident-manager
+ *
+ * Incident Lifecycle:
+ * - Open: Newly created incident awaiting triage
+ * - Investigating: Active investigation in progress
+ * - Contained: Threat contained, remediation underway
+ * - Resolved: Issue resolved, pending verification
+ * - Closed: Incident fully remediated and documented
+ *
+ * Priority Levels:
+ * - Critical: Active attack, data breach (immediate response)
+ * - High: Significant vulnerability (< 4 hour response)
+ * - Medium: Security misconfiguration (< 24 hour response)
+ * - Low: Minor finding (< 72 hour response)
+ *
+ * Features:
+ * - Incident creation from audit findings
+ * - Action logging and timeline tracking
+ * - Assignment and escalation workflows
+ * - Filtering and search capabilities
+ * - Export for compliance reporting
+ *
+ * Integration Points:
+ * - Auto-created from critical audit findings
+ * - Links to affected AD objects
+ * - Audit log correlation
+ */
 "use client"
 
 import type React from "react"

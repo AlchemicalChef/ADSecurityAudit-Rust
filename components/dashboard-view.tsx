@@ -1,3 +1,30 @@
+/**
+ * Dashboard View Component
+ *
+ * Main security dashboard providing an executive overview of Active Directory
+ * security posture. Aggregates data from multiple audit sources to display:
+ *
+ * - Critical security findings count and severity breakdown
+ * - Tier 0 privileged account statistics
+ * - KRBTGT password age and rotation status
+ * - ADCS (AD Certificate Services) vulnerability summary
+ * - Risk scoring trends and recommendations
+ *
+ * @module components/dashboard-view
+ *
+ * Features:
+ * - Real-time audit progress tracking with visual feedback
+ * - Drill-down dialogs for detailed findings
+ * - Interactive charts (bar and pie) for data visualization
+ * - Auto-refresh capability for continuous monitoring
+ *
+ * Data Sources:
+ * - DA Equivalence Audit (shadow admin detection)
+ * - Privileged Accounts Summary
+ * - KRBTGT Analysis
+ * - AdminSDHolder Analysis
+ * - GPO Security Audit
+ */
 "use client"
 
 import { useEffect, useState, useCallback } from "react"

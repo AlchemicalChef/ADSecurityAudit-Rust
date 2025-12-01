@@ -1,3 +1,31 @@
+/**
+ * Credential Prompt Component
+ *
+ * Secure credential entry dialog for Active Directory authentication.
+ * Implements security best practices for credential handling.
+ *
+ * @module components/credential-prompt
+ *
+ * Features:
+ * - Username/password entry with validation
+ * - Password visibility toggle
+ * - Remember credentials option (encrypted storage)
+ * - Auto-fill from saved credentials
+ * - Connection testing before save
+ *
+ * Security Measures:
+ * - Password field never logged or displayed
+ * - Credentials cleared from memory after use
+ * - Encrypted storage using AES-256-GCM
+ * - No credential transmission in plain text
+ *
+ * Credential Formats Supported:
+ * - DOMAIN\\username (SAM format)
+ * - username@domain.com (UPN format)
+ * - Distinguished Name (DN)
+ *
+ * @see lib/tauri-api for credential validation
+ */
 "use client"
 
 import type React from "react"

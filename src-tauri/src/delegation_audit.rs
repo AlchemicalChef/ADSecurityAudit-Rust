@@ -1,5 +1,51 @@
-// Delegation Audit Module - Implements Kerberos delegation security checks
-// Based on DelegationAudits.ps1 functionality
+//! Kerberos Delegation Security Audit Module
+//!
+//! Analyzes Active Directory for dangerous Kerberos delegation configurations
+//! that could enable privilege escalation and lateral movement attacks.
+//!
+//! # Kerberos Delegation Types
+//!
+//! ## Unconstrained Delegation (CRITICAL Risk)
+//! - Account can impersonate ANY user to ANY service
+//! - Collects TGTs from authenticating users in memory
+//! - If compromised, attacker gains domain-wide access
+//! - Should only exist on Domain Controllers
+//!
+//! ## Constrained Delegation (HIGH Risk)
+//! - Account can impersonate users to SPECIFIC services only
+//! - Limited blast radius compared to unconstrained
+//! - Still dangerous if account is compromised
+//!
+//! ## Constrained with Protocol Transition / T2A4D (CRITICAL Risk)
+//! - Can impersonate users WITHOUT their credentials
+//! - Combines S4U2Self and S4U2Proxy Kerberos extensions
+//! - Extremely dangerous on user accounts
+//!
+//! ## Resource-Based Constrained Delegation / RBCD (MEDIUM Risk)
+//! - Target resource controls who can delegate to it
+//! - More secure design than traditional delegation
+//! - Can be abused if attacker modifies msDS-AllowedToActOnBehalfOfOtherIdentity
+//!
+//! # Attack Scenarios Detected
+//!
+//! | Finding | Risk | Attack |
+//! |---------|------|--------|
+//! | User with Unconstrained | Critical | Credential theft via TGT collection |
+//! | User with T2A4D | Critical | Impersonate any user without creds |
+//! | Computer with Unconstrained | High | Pivot point for lateral movement |
+//! | Excessive RBCD | Medium | Potential unauthorized delegation |
+//!
+//! # Remediation Strategies
+//!
+//! 1. Replace unconstrained delegation with constrained
+//! 2. Migrate user accounts to Group Managed Service Accounts (gMSA)
+//! 3. Use RBCD instead of traditional constrained delegation
+//! 4. Enable "Account is sensitive and cannot be delegated" for admins
+//!
+//! # References
+//!
+//! - [MS-SFU: Kerberos Protocol Extensions](https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-sfu/)
+//! - [Kerberos Delegation Attack Overview](https://attack.mitre.org/techniques/T1134/)
 
 use serde::{Deserialize, Serialize};
 

@@ -1,5 +1,55 @@
-// Permissions Audit Module - Implements dangerous permissions checks
-// Based on PermissionsAudits.ps1 functionality
+//! Active Directory Permissions Audit Module
+//!
+//! Detects dangerous Access Control Entries (ACEs) that could enable
+//! privilege escalation, persistence, and domain compromise attacks.
+//!
+//! # Critical Checks Performed
+//!
+//! ## Enterprise Key Admins Misconfiguration
+//! A well-known Windows Server 2016+ bug where Enterprise Key Admins is granted
+//! GenericAll instead of scoped WriteProperty for msDS-KeyCredentialLink.
+//! This can unintentionally enable **DCSync attacks**.
+//!
+//! ## Dangerous Rights on Critical OUs
+//! Non-privileged principals with excessive rights on:
+//! - Domain Controllers OU
+//! - AdminSDHolder container
+//! - Domain root naming context
+//!
+//! # Dangerous Permission Reference
+//!
+//! | Permission | GUID | Impact |
+//! |------------|------|--------|
+//! | GenericAll | - | Full control - can do anything |
+//! | WriteDacl | - | Modify ACL - grant self any rights |
+//! | WriteOwner | - | Take ownership - then modify ACL |
+//! | GenericWrite | - | Modify most attributes |
+//! | WriteProperty | varies | Modify specific attributes |
+//! | DS-Replication-Get-Changes | 1131f6aa-... | Read directory changes |
+//! | DS-Replication-Get-Changes-All | 1131f6ad-... | **DCSync** - extract password hashes |
+//!
+//! # Extended Rights GUIDs
+//!
+//! - `msDS-KeyCredentialLink`: `5b47d60f-6090-40b2-9f37-2a4de88f3063`
+//! - `DS-Replication-Get-Changes`: `1131f6aa-9c07-11d1-f79f-00c04fc2dcd2`
+//! - `DS-Replication-Get-Changes-All`: `1131f6ad-9c07-11d1-f79f-00c04fc2dcd2`
+//! - `User-Force-Change-Password`: `00299570-246d-11d0-a768-00aa006e0529`
+//!
+//! # Attack Scenarios Detected
+//!
+//! | Finding | Risk | Attack |
+//! |---------|------|--------|
+//! | EKA GenericAll | Critical | DCSync via msDS-KeyCredentialLink |
+//! | WriteDacl on DC OU | Critical | Grant self replication rights |
+//! | WriteOwner on Domain | Critical | Take ownership, then full control |
+//! | Non-admin with GenericWrite | High | Modify sensitive attributes |
+//!
+//! # Remediation
+//!
+//! 1. Remove over-privileged ACEs using ADSIEdit or PowerShell
+//! 2. Scope Enterprise Key Admins to msDS-KeyCredentialLink only
+//! 3. Implement regular permission audits with BloodHound
+//! 4. Enable Directory Service Changes auditing (Event ID 5136)
 
 use serde::{Deserialize, Serialize};
 

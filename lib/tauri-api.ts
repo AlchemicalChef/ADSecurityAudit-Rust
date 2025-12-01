@@ -1,3 +1,43 @@
+/**
+ * Tauri API Bridge Module
+ *
+ * TypeScript interface to the Rust backend via Tauri IPC.
+ * Provides type-safe wrappers for all backend commands with
+ * automatic demo mode fallback for browser preview.
+ *
+ * @module lib/tauri-api
+ *
+ * API Categories:
+ * - Connection: AD connection management (connect, disconnect, status)
+ * - Users: User search, details, and management
+ * - Auditing: Security scans (KRBTGT, AdminSDHolder, delegation, etc.)
+ * - Groups: Privileged group enumeration and analysis
+ * - Incidents: Security incident CRUD operations
+ * - Settings: Application configuration persistence
+ *
+ * Demo Mode:
+ * When running outside Tauri (browser preview), returns mock data
+ * to enable UI development without AD connectivity.
+ *
+ * Type Safety:
+ * All interfaces mirror Rust backend structures ensuring compile-time
+ * type checking across the IPC boundary.
+ *
+ * Error Handling:
+ * All async functions throw on backend errors with descriptive messages.
+ *
+ * @example
+ * ```typescript
+ * import { searchUsers, auditKrbtgt } from '@/lib/tauri-api'
+ *
+ * // Search for users
+ * const users = await searchUsers('john')
+ *
+ * // Run KRBTGT audit
+ * const analysis = await auditKrbtgt()
+ * ```
+ */
+
 // Mock implementation for browser preview - in production, use actual Tauri invoke
 
 // Environment detection: only use mock data in development/demo mode

@@ -1,3 +1,36 @@
+/**
+ * Audit Report Export Dialog Component
+ *
+ * Provides export functionality for security audit results in multiple
+ * formats suitable for compliance reporting and documentation.
+ *
+ * @module components/export-dialog
+ *
+ * Export Formats:
+ * - JSON: Machine-readable, full data fidelity
+ * - CSV: Spreadsheet-compatible, flat structure
+ * - HTML: Self-contained report with styling
+ * - PDF: Print-ready compliance documentation
+ *
+ * Export Content Options:
+ * - Executive Summary: High-level risk overview
+ * - Full Audit Report: Complete findings with details
+ * - Findings Only: Security issues without context
+ * - Recommendations: Remediation guidance
+ *
+ * Filtering Options:
+ * - By severity level (Critical, High, Medium, Low)
+ * - By audit category (Privileged Access, Delegation, etc.)
+ * - By date range
+ * - By affected object type
+ *
+ * Report Sections:
+ * - Domain information and scan metadata
+ * - Risk score summary
+ * - Categorized findings with evidence
+ * - Remediation recommendations
+ * - Appendix with raw data
+ */
 'use client'
 
 import { useState } from 'react'

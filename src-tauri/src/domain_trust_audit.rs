@@ -1,5 +1,50 @@
-// Domain Trust Audit Module - Implements domain trust security checks
-// Based on DomainTrustAudits.ps1 functionality
+//! Domain Trust Security Audit Module
+//!
+//! Analyzes Active Directory domain and forest trust relationships for security
+//! vulnerabilities that could enable cross-domain attacks and privilege escalation.
+//!
+//! # Trust Security Fundamentals
+//!
+//! Domain trusts extend the authentication boundary and must be carefully secured
+//! to prevent lateral movement and privilege escalation attacks.
+//!
+//! # Trust Types
+//!
+//! | Type | Scope | Risk Considerations |
+//! |------|-------|---------------------|
+//! | External | Single domain | Highest risk - often lacks security controls |
+//! | Forest | Entire forest | Broad access - requires selective authentication |
+//! | Parent-Child | Within forest | Internal - generally lower risk |
+//! | Shortcut | Cross-domain | Performance optimization - verify necessity |
+//! | Realm | Kerberos | Non-Windows - special security considerations |
+//!
+//! # Critical Security Controls
+//!
+//! ## SID Filtering (Quarantine)
+//! - Blocks SID history attacks from trusted domains
+//! - **Must be enabled** on external trusts
+//! - Prevents attackers from forging privileged SIDs
+//! - Default: Enabled for external trusts, disabled for forest trusts
+//!
+//! ## Selective Authentication
+//! - Restricts which users can authenticate through the trust
+//! - Requires explicit "Allowed to authenticate" permission on resources
+//! - **Recommended** for all cross-forest trusts
+//! - Limits blast radius if trusted domain is compromised
+//!
+//! # Attack Scenarios Detected
+//!
+//! | Vulnerability | Risk | Attack Vector |
+//! |---------------|------|---------------|
+//! | SID Filtering Disabled | Critical | SID history injection for privilege escalation |
+//! | No Selective Auth | High | Unrestricted cross-forest access |
+//! | Bidirectional Trust | Medium | Expanded attack surface in both directions |
+//! | Stale Trust | Low | May indicate misconfiguration or abandonment |
+//!
+//! # References
+//!
+//! - [Microsoft Trust Security](https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc755321(v=ws.10))
+//! - [SID Filtering Attack](https://attack.mitre.org/techniques/T1134/005/)
 
 use serde::{Deserialize, Serialize};
 

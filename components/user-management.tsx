@@ -1,3 +1,39 @@
+/**
+ * User Management Component
+ *
+ * Provides AD user account search, viewing, and management capabilities
+ * with integrated security analysis.
+ *
+ * @module components/user-management
+ *
+ * Features:
+ * - User search by name, SAM account name, or email
+ * - Detailed user information display
+ * - Account status indicators (enabled, locked, expired)
+ * - Security flag analysis (AdminCount, password policies)
+ * - Group membership viewing
+ * - Account disabling capability
+ *
+ * Security Analysis:
+ * - Password expiration status
+ * - Password never expires flag (risk indicator)
+ * - Account lockout status
+ * - LastLogon timestamp
+ * - AdminCount attribute (protected account)
+ * - Sensitive account flag
+ *
+ * User Details Displayed:
+ * - Distinguished Name (DN)
+ * - SAM Account Name
+ * - User Principal Name (UPN)
+ * - Display Name
+ * - Email Address
+ * - Department/Title
+ * - Manager
+ * - Account Control Flags
+ *
+ * @see https://docs.microsoft.com/en-us/windows/win32/adschema/a-useraccountcontrol
+ */
 "use client"
 
 import type React from "react"

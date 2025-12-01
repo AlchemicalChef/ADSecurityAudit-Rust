@@ -1,3 +1,31 @@
+/**
+ * Kerberos Delegation Audit Component
+ *
+ * Analyzes Kerberos delegation configurations across the domain to identify
+ * potential privilege escalation vectors and lateral movement opportunities.
+ *
+ * @module components/delegation-audit
+ *
+ * Delegation Types Analyzed:
+ * - Unconstrained Delegation (CRITICAL) - Can impersonate any user to any service
+ * - Constrained Delegation (HIGH) - Can impersonate users to specific services
+ * - Constrained with Protocol Transition / T2A4D (CRITICAL) - No credential required
+ * - Resource-Based Constrained Delegation / RBCD (MEDIUM) - Target controls delegation
+ *
+ * Security Impact:
+ * - Unconstrained delegation collects TGTs in memory (Printer Bug, PrivExchange)
+ * - Constrained delegation can be exploited for lateral movement
+ * - Protocol transition allows impersonation without user credentials
+ * - RBCD can be abused if attacker modifies msDS-AllowedToActOnBehalfOfOtherIdentity
+ *
+ * Recommendations Generated:
+ * - Migration to Group Managed Service Accounts (gMSA)
+ * - Conversion from unconstrained to constrained delegation
+ * - Implementation of RBCD where appropriate
+ * - Enabling "Account is sensitive" flag for admins
+ *
+ * @see https://attack.mitre.org/techniques/T1558/ - Kerberos delegation attacks
+ */
 "use client"
 
 import { useState, useEffect } from "react"
