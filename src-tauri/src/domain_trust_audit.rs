@@ -48,6 +48,12 @@
 
 use serde::{Deserialize, Serialize};
 
+// Use shared Recommendation from common_types
+use crate::common_types::Recommendation;
+
+/// Type alias for backward compatibility - use Recommendation from common_types
+pub type TrustRecommendation = Recommendation;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TrustDirection {
     Inbound,
@@ -144,14 +150,6 @@ pub struct DomainTrustAudit {
     pub recommendations: Vec<TrustRecommendation>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrustRecommendation {
-    pub priority: u8,
-    pub title: String,
-    pub description: String,
-    pub command: String,
-    pub steps: Vec<String>,
-}
 
 impl DomainTrustAudit {
     pub fn new() -> Self {
@@ -320,60 +318,60 @@ impl DomainTrustAudit {
         let mut recommendations = Vec::new();
 
         if self.trusts_without_sid_filtering > 0 {
-            recommendations.push(TrustRecommendation {
-                priority: 1,
-                title: "Enable SID Filtering on External Trusts".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::with_command(
+                1,
+                "Enable SID Filtering on External Trusts",
+                &format!(
                     "{} external trust(s) have SID filtering disabled, exposing the domain to SID history injection attacks.",
                     self.trusts_without_sid_filtering
                 ),
-                command: format!("netdom trust {} /domain:<TRUSTED_DOMAIN> /quarantine:yes", local_domain),
-                steps: vec![
+                vec![
                     "Identify all trusts without SID filtering".to_string(),
                     "Verify applications don't rely on SID history for cross-domain access".to_string(),
                     "Enable SID filtering using: netdom trust <YOUR_DOMAIN> /domain:<TRUSTED_DOMAIN> /quarantine:yes".to_string(),
                     "Test cross-domain authentication after enabling".to_string(),
                     "Monitor for access issues and adjust if needed".to_string(),
                 ],
-            });
+                &format!("netdom trust {} /domain:<TRUSTED_DOMAIN> /quarantine:yes", local_domain),
+            ));
         }
 
         if self.trusts_without_selective_auth > 0 {
-            recommendations.push(TrustRecommendation {
-                priority: 2,
-                title: "Enable Selective Authentication on Forest Trusts".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::with_command(
+                2,
+                "Enable Selective Authentication on Forest Trusts",
+                &format!(
                     "{} forest trust(s) allow any user from trusted forests to authenticate to any resource.",
                     self.trusts_without_selective_auth
                 ),
-                command: "Active Directory Domains and Trusts > Properties > Trust > Selective Authentication".to_string(),
-                steps: vec![
+                vec![
                     "Open Active Directory Domains and Trusts".to_string(),
                     "Right-click your domain and select Properties".to_string(),
                     "Go to Trusts tab and select the forest trust".to_string(),
                     "Click Properties, then select 'Selective authentication'".to_string(),
                     "Grant 'Allowed to authenticate' permission on specific resources for trusted users".to_string(),
                 ],
-            });
+                "Active Directory Domains and Trusts > Properties > Trust > Selective Authentication",
+            ));
         }
 
         if self.bidirectional_trusts > 0 {
-            recommendations.push(TrustRecommendation {
-                priority: 3,
-                title: "Review Bidirectional Trust Requirements".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::with_command(
+                3,
+                "Review Bidirectional Trust Requirements",
+                &format!(
                     "{} bidirectional trust(s) found. Bidirectional trusts increase the attack surface.",
                     self.bidirectional_trusts
                 ),
-                command: "Get-ADTrust -Filter * | Where-Object {$_.Direction -eq 'Bidirectional'}".to_string(),
-                steps: vec![
+                vec![
                     "List all bidirectional trusts".to_string(),
                     "For each trust, determine if bidirectional access is actually required".to_string(),
                     "If only one-way access is needed, recreate as a one-way trust".to_string(),
                     "Document the business justification for remaining bidirectional trusts".to_string(),
                     "Implement additional monitoring for cross-domain authentications".to_string(),
                 ],
-            });
+                "Get-ADTrust -Filter * | Where-Object {$_.Direction -eq 'Bidirectional'}",
+            ));
         }
 
         self.recommendations = recommendations;

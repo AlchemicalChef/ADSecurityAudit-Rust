@@ -27,6 +27,9 @@ mod audit_log;
 mod risk_scoring;
 mod anomaly_detection;
 mod domain_discovery;
+mod infrastructure_audit;
+mod common_types;
+mod ldap_helpers;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -44,6 +47,7 @@ use domain_trust_audit::DomainTrustAudit;
 use permissions_audit::PermissionsAudit;
 use group_audit::GroupAudit;
 use da_equivalence::DAEquivalenceAudit;
+use infrastructure_audit::InfrastructureAudit;
 
 use connection_pool::{LdapConnectionPool, PoolConfig, PoolStats};
 use query_cache::{CacheManager, CacheKey};
@@ -67,6 +71,7 @@ pub struct ComprehensiveAuditResult {
     pub permissions_audit: Option<PermissionsAudit>,
     pub group_audit: Option<GroupAudit>,
     pub da_equivalence_audit: Option<DAEquivalenceAudit>,
+    pub infrastructure_audit: Option<InfrastructureAudit>,
     pub execution_stats: ExecutionStats,
     pub errors: Vec<String>,
 }
@@ -143,6 +148,7 @@ async fn run_comprehensive_audit(
         permissions_result,
         group_result,
         da_result,
+        infrastructure_result,
     ) = tokio::join!(
         client.audit_domain_security(),
         client.audit_gpos(),
@@ -151,6 +157,7 @@ async fn run_comprehensive_audit(
         client.audit_permissions(),
         client.audit_privileged_groups(),
         client.audit_da_equivalence(),
+        client.audit_infrastructure_security(),
     );
 
     let mut errors = Vec::new();
@@ -211,6 +218,14 @@ async fn run_comprehensive_audit(
         }
     };
 
+    let infrastructure_audit = match infrastructure_result {
+        Ok(result) => Some(result),
+        Err(e) => {
+            errors.push(format!("Infrastructure audit failed: {}", e));
+            None
+        }
+    };
+
     Ok(ComprehensiveAuditResult {
         domain_security,
         gpo_audit,
@@ -219,6 +234,7 @@ async fn run_comprehensive_audit(
         permissions_audit,
         group_audit,
         da_equivalence_audit,
+        infrastructure_audit,
         execution_stats: state.executor.stats().await,
         errors,
     })
@@ -1053,6 +1069,57 @@ async fn audit_privileged_groups(
 }
 
 #[tauri::command]
+async fn audit_infrastructure_security(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<InfrastructureAudit, String> {
+    info!("=== AUDIT: Infrastructure Security ===");
+
+    // Emit start progress
+    let _ = app.emit("audit-progress", AuditProgressEvent {
+        audit_type: "infrastructure".into(),
+        phase: "start".into(),
+        current: 0,
+        total: 6,
+        message: "Starting infrastructure security audit...".into(),
+        items_found: 0,
+    });
+
+    let ad_client = state.ad_client.read().await;
+    let client = match ad_client.as_ref() {
+        Some(c) => c,
+        None => {
+            error!("Infrastructure Audit FAILED: Not connected to Active Directory");
+            return Err("Not connected to Active Directory".to_string());
+        }
+    };
+
+    let result = match client.audit_infrastructure_security().await {
+        Ok(r) => {
+            info!("Infrastructure Audit SUCCESS: Found {} findings, Risk score: {}",
+                r.findings.len(), r.overall_risk_score);
+            r
+        }
+        Err(e) => {
+            error!("Infrastructure Audit FAILED: {}", e);
+            return Err(format!("Failed to audit infrastructure security: {}", e));
+        }
+    };
+
+    // Emit complete progress
+    let _ = app.emit("audit-progress", AuditProgressEvent {
+        audit_type: "infrastructure".into(),
+        phase: "complete".into(),
+        current: 6,
+        total: 6,
+        message: "Infrastructure security audit complete".into(),
+        items_found: result.findings.len(),
+    });
+
+    Ok(result)
+}
+
+#[tauri::command]
 async fn audit_da_equivalence(
     app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
@@ -1774,6 +1841,7 @@ fn main() {
             audit_permissions,
             audit_privileged_groups,
             audit_da_equivalence,
+            audit_infrastructure_security,
             get_performance_stats,
             invalidate_cache,
             run_comprehensive_audit,

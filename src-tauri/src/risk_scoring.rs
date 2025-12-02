@@ -665,6 +665,7 @@ impl RiskScoringEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
 
     #[test]
     fn test_user_risk_scoring() {

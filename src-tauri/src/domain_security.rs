@@ -7,27 +7,11 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Severity levels for security findings
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Severity {
-    Critical,
-    High,
-    Medium,
-    Low,
-    Informational,
-}
+// Use shared FindingSeverity from common_types
+use crate::common_types::FindingSeverity;
 
-impl Severity {
-    pub fn level(&self) -> u8 {
-        match self {
-            Severity::Critical => 4,
-            Severity::High => 3,
-            Severity::Medium => 2,
-            Severity::Low => 1,
-            Severity::Informational => 0,
-        }
-    }
-}
+/// Type alias for backward compatibility - use FindingSeverity from common_types
+pub type Severity = FindingSeverity;
 
 /// Security finding category
 #[derive(Debug, Clone, Serialize, Deserialize)]

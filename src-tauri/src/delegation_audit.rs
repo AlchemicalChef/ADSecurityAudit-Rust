@@ -49,6 +49,12 @@
 
 use serde::{Deserialize, Serialize};
 
+// Use shared Recommendation from common_types
+use crate::common_types::Recommendation;
+
+/// Type alias for backward compatibility - use Recommendation from common_types
+pub type DelegationRecommendation = Recommendation;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DelegationType {
     Unconstrained,
@@ -140,14 +146,6 @@ pub struct DelegationAudit {
     pub risk_score: u32,
     pub scan_timestamp: String,
     pub recommendations: Vec<DelegationRecommendation>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DelegationRecommendation {
-    pub priority: u8,
-    pub title: String,
-    pub description: String,
-    pub steps: Vec<String>,
 }
 
 impl DelegationAudit {
@@ -336,75 +334,75 @@ impl DelegationAudit {
         let mut recommendations = Vec::new();
 
         if self.unconstrained_count > 0 {
-            recommendations.push(DelegationRecommendation {
-                priority: 1,
-                title: "Eliminate Unconstrained Delegation".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::new(
+                1,
+                "Eliminate Unconstrained Delegation",
+                &format!(
                     "Found {} objects with unconstrained delegation. This is the most dangerous delegation type.",
                     self.unconstrained_count
                 ),
-                steps: vec![
+                vec![
                     "Identify all accounts with unconstrained delegation using: Get-ADObject -Filter {TrustedForDelegation -eq $true}".to_string(),
                     "For each account, determine if delegation is actually needed".to_string(),
                     "Convert to constrained delegation with specific SPNs where required".to_string(),
                     "Consider using Resource-Based Constrained Delegation (RBCD) instead".to_string(),
                     "For Domain Controllers, this is expected but ensure they are properly protected".to_string(),
                 ],
-            });
+            ));
         }
 
         if self.protocol_transition_count > 0 {
-            recommendations.push(DelegationRecommendation {
-                priority: 2,
-                title: "Review Protocol Transition (T2A4D) Configurations".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::new(
+                2,
+                "Review Protocol Transition (T2A4D) Configurations",
+                &format!(
                     "Found {} accounts with protocol transition enabled, allowing impersonation without user interaction.",
                     self.protocol_transition_count
                 ),
-                steps: vec![
+                vec![
                     "List accounts: Get-ADObject -Filter {TrustedToAuthForDelegation -eq $true}".to_string(),
                     "For user accounts, disable T2A4D unless absolutely required".to_string(),
                     "For service accounts, migrate to Group Managed Service Accounts (gMSA)".to_string(),
                     "Ensure all T2A4D accounts use very strong passwords (30+ characters)".to_string(),
                     "Implement monitoring for S4U2Self and S4U2Proxy ticket requests".to_string(),
                 ],
-            });
+            ));
         }
 
         if self.user_account_delegations > 0 {
-            recommendations.push(DelegationRecommendation {
-                priority: 3,
-                title: "Migrate User Account Delegations to Service Accounts".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::new(
+                3,
+                "Migrate User Account Delegations to Service Accounts",
+                &format!(
                     "Found {} user accounts with delegation configured. User accounts are more vulnerable to credential theft.",
                     self.user_account_delegations
                 ),
-                steps: vec![
+                vec![
                     "Create Group Managed Service Accounts (gMSA) for each service".to_string(),
                     "Configure the gMSA with the minimum required delegation".to_string(),
                     "Update service configurations to use gMSA instead of user accounts".to_string(),
                     "Disable or delete the old user accounts after migration".to_string(),
                     "gMSAs have automatically rotated 120-character passwords".to_string(),
                 ],
-            });
+            ));
         }
 
         if self.rbcd_count > 0 {
-            recommendations.push(DelegationRecommendation {
-                priority: 4,
-                title: "Audit Resource-Based Constrained Delegation".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::new(
+                4,
+                "Audit Resource-Based Constrained Delegation",
+                &format!(
                     "Found {} objects with RBCD configured. While RBCD is more secure, it still needs regular review.",
                     self.rbcd_count
                 ),
-                steps: vec![
+                vec![
                     "List RBCD: Get-ADObject -Filter {msDS-AllowedToActOnBehalfOfOtherIdentity -like '*'}".to_string(),
                     "Review each RBCD configuration for necessity".to_string(),
                     "Ensure only required accounts are in the delegation list".to_string(),
                     "Monitor for changes to msDS-AllowedToActOnBehalfOfOtherIdentity".to_string(),
                     "Consider implementing just-in-time RBCD where possible".to_string(),
                 ],
-            });
+            ));
         }
 
         self.recommendations = recommendations;

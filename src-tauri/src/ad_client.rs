@@ -73,6 +73,8 @@ use crate::da_equivalence::{
 };
 
 use crate::ldap_utils::escape_ldap_filter;
+use crate::ldap_helpers::SearchEntryExt;
+use crate::common_types::extract_domain_from_dn;
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -550,7 +552,7 @@ impl ActiveDirectoryClient {
             .and_then(|v| v.first())
             .ok_or_else(|| anyhow!("No nTSecurityDescriptor found for AdminSDHolder"))?;
 
-        let sd = crate::ldap_utils::parse_security_descriptor(sd_bytes)
+        let sd = crate::ldap_utils::parse_security_descriptor(&sd_bytes)
             .map_err(|e| anyhow!("Failed to parse AdminSDHolder security descriptor: {}", e))?;
 
         // Parse owner and group from security descriptor
@@ -690,63 +692,16 @@ impl ActiveDirectoryClient {
     }
 
     fn parse_user_entry(&self, entry: SearchEntry) -> Result<UserInfo> {
-        let distinguished_name = entry
-            .attrs
-            .get("distinguishedName")
-            .and_then(|v| v.first())
-            .unwrap_or(&String::new())
-            .clone();
-
-        let username = entry
-            .attrs
-            .get("sAMAccountName")
-            .and_then(|v| v.first())
-            .unwrap_or(&String::new())
-            .clone();
-
-        let email = entry
-            .attrs
-            .get("mail")
-            .and_then(|v| v.first())
-            .unwrap_or(&String::new())
-            .clone();
-
-        let display_name = entry
-            .attrs
-            .get("displayName")
-            .and_then(|v| v.first())
-            .unwrap_or(&String::new())
-            .clone();
-
-        let uac = entry
-            .attrs
-            .get("userAccountControl")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<i32>().ok())
-            .unwrap_or(0);
-
-        let enabled = (uac & 2) == 0;
-
-        let last_logon = entry
-            .attrs
-            .get("lastLogon")
-            .and_then(|v| v.first())
-            .cloned();
-
-        let groups = entry
-            .attrs
-            .get("memberOf")
-            .map(|v| v.clone())
-            .unwrap_or_default();
+        let uac_flags = entry.get_uac_flags();
 
         Ok(UserInfo {
-            distinguished_name,
-            username,
-            email,
-            display_name,
-            enabled,
-            last_logon,
-            groups,
+            distinguished_name: entry.get_string_attr("distinguishedName"),
+            username: entry.get_sam_account_name(),
+            email: entry.get_string_attr("mail"),
+            display_name: entry.get_string_attr("displayName"),
+            enabled: uac_flags.is_enabled(),
+            last_logon: entry.get_optional_attr("lastLogon"),
+            groups: entry.get_multi_attr("memberOf"),
         })
     }
 
@@ -795,73 +750,34 @@ impl ActiveDirectoryClient {
             .ok_or_else(|| anyhow!("KRBTGT account not found"))?;
         let entry = SearchEntry::construct(entry);
 
-        let distinguished_name = entry
-            .attrs
-            .get("distinguishedName")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-
-        let sam_account_name = entry
-            .attrs
-            .get("sAMAccountName")
-            .and_then(|v| v.first())
-            .cloned()
+        let distinguished_name = entry.get_string_attr("distinguishedName");
+        let sam_account_name = entry.get_optional_attr("sAMAccountName")
             .unwrap_or_else(|| "krbtgt".to_string());
 
         // Extract domain from base_dn
-        let domain = self.base_dn
-            .split(',')
-            .filter_map(|part| {
-                if part.to_uppercase().starts_with("DC=") {
-                    Some(part[3..].to_string())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(".");
+        let domain = extract_domain_from_dn(&self.base_dn);
 
         // Parse whenCreated (format: YYYYMMDDHHmmss.0Z)
-        let created = entry
-            .attrs
-            .get("whenCreated")
-            .and_then(|v| v.first())
-            .map(|s| self.parse_ad_timestamp(s))
+        let created = entry.get_optional_attr("whenCreated")
+            .map(|s| self.parse_ad_timestamp(&s))
             .unwrap_or_else(|| Utc::now().to_rfc3339());
 
         // Parse pwdLastSet (Windows FILETIME - 100-nanosecond intervals since 1601)
-        let pwd_last_set = entry
-            .attrs
-            .get("pwdLastSet")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<i64>().ok())
-            .unwrap_or(0);
-
+        let pwd_last_set = entry.get_i64_attr("pwdLastSet");
         let last_password_change = self.filetime_to_rfc3339(pwd_last_set);
         let password_age_days = self.calculate_password_age_days(pwd_last_set);
 
-        // Parse userAccountControl
-        let uac = entry
-            .attrs
-            .get("userAccountControl")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(0);
-
+        // Parse userAccountControl using helper
+        let uac_flags = entry.get_uac_flags();
         let account_status = AccountStatus {
-            is_enabled: (uac & 0x0002) == 0, // ADS_UF_ACCOUNTDISABLE
-            is_locked: (uac & 0x0010) != 0,  // ADS_UF_LOCKOUT
-            password_never_expires: (uac & 0x10000) != 0, // ADS_UF_DONT_EXPIRE_PASSWD
+            is_enabled: uac_flags.is_enabled(),
+            is_locked: uac_flags.is_locked,
+            password_never_expires: uac_flags.password_never_expires,
         };
 
-        // Parse Key Version Number
-        let key_version_number = entry
-            .attrs
-            .get("msDS-KeyVersionNumber")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(2); // Default KVN is typically 2
+        // Parse Key Version Number (default KVN is typically 2)
+        let key_version_number = entry.get_optional_u32_attr("msDS-KeyVersionNumber")
+            .unwrap_or(2);
 
         Self::unbind_with_timeout(ldap).await;
 
@@ -1108,12 +1024,8 @@ impl ActiveDirectoryClient {
             
             for entry in rs {
                 let entry = SearchEntry::construct(entry);
-                
-                let dn = entry.attrs.get("distinguishedName")
-                    .and_then(|v| v.first())
-                    .cloned()
-                    .unwrap_or_default();
-                
+                let dn = entry.get_string_attr("distinguishedName");
+
                 // Check if account already exists
                 if let Some(existing) = privileged_accounts.iter_mut()
                     .find(|a: &&mut PrivilegedAccount| a.distinguished_name == dn) {
@@ -1193,12 +1105,22 @@ impl ActiveDirectoryClient {
             .filter(|a| a.risk_factors.iter()
                 .any(|f| matches!(f.factor_type, crate::privileged_accounts::RiskFactorType::KerberoastableSpn)))
             .count();
-        
+
+        // Count AS-REP Roastable accounts (DONT_REQUIRE_PREAUTH flag)
+        let asrep_roastable_accounts = accounts.iter()
+            .filter(|a| a.is_asrep_roastable)
+            .count();
+
+        // Count Tier 0 accounts not in Protected Users group
+        let tier0_not_in_protected_users = accounts.iter()
+            .filter(|a| matches!(a.highest_privilege_level, PrivilegeLevel::Tier0) && !a.in_protected_users)
+            .count();
+
         let mut accounts_by_group = HashMap::new();
         for group in &groups {
             accounts_by_group.insert(group.name.clone(), group.member_count);
         }
-        
+
         let mut summary = PrivilegedAccountSummary {
             total_privileged_accounts,
             total_tier0_accounts,
@@ -1213,6 +1135,8 @@ impl ActiveDirectoryClient {
             accounts_with_stale_passwords,
             accounts_password_never_expires,
             kerberoastable_accounts,
+            asrep_roastable_accounts,
+            tier0_not_in_protected_users,
             privileged_groups: groups,
             accounts_by_group,
             overall_risk_score: 0,
@@ -1220,15 +1144,15 @@ impl ActiveDirectoryClient {
             analysis_timestamp: Utc::now().to_rfc3339(),
             recommendations: vec![],
         };
-        
+
         let (risk_score, risk_level) = calculate_overall_risk(&summary);
         summary.overall_risk_score = risk_score;
         summary.risk_level = risk_level;
         summary.recommendations = generate_privileged_account_recommendations(&summary, &accounts);
-        
+
         Ok(summary)
     }
-    
+
     pub async fn get_privileged_groups(&self) -> Result<Vec<PrivilegedGroup>> {
         let mut ldap = self.get_connection().await?;
         let mut groups = Vec::new();
@@ -1250,21 +1174,11 @@ impl ActiveDirectoryClient {
             
             if let Some(entry) = rs.into_iter().next() {
                 let entry = SearchEntry::construct(entry);
-                
-                let dn = entry.attrs.get("distinguishedName")
-                    .and_then(|v| v.first())
-                    .cloned()
-                    .unwrap_or_default();
-                
-                let description = entry.attrs.get("description")
-                    .and_then(|v| v.first())
-                    .cloned()
+                let dn = entry.get_string_attr("distinguishedName");
+                let description = entry.get_optional_attr("description")
                     .unwrap_or_else(|| "No description".to_string());
-                
-                let member_count = entry.attrs.get("member")
-                    .map(|v| v.len())
-                    .unwrap_or(0);
-                
+                let member_count = entry.get_multi_attr("member").len();
+
                 groups.push(PrivilegedGroup {
                     name: group_name.to_string(),
                     distinguished_name: dn,
@@ -1278,7 +1192,7 @@ impl ActiveDirectoryClient {
                 });
             }
         }
-        
+
         Self::unbind_with_timeout(ldap).await;
         Ok(groups)
     }
@@ -1314,20 +1228,10 @@ impl ActiveDirectoryClient {
 
             if let Some(entry) = rs.into_iter().next() {
                 let entry = SearchEntry::construct(entry);
-
-                let dn = entry.attrs.get("distinguishedName")
-                    .and_then(|v| v.first())
-                    .cloned()
-                    .unwrap_or_default();
-
-                let description = entry.attrs.get("description")
-                    .and_then(|v| v.first())
-                    .cloned()
+                let dn = entry.get_string_attr("distinguishedName");
+                let description = entry.get_optional_attr("description")
                     .unwrap_or_else(|| "No description".to_string());
-
-                let member_count = entry.attrs.get("member")
-                    .map(|v| v.len())
-                    .unwrap_or(0);
+                let member_count = entry.get_multi_attr("member").len();
 
                 groups.push(PrivilegedGroup {
                     name: group_name.to_string(),
@@ -1388,6 +1292,16 @@ impl ActiveDirectoryClient {
                 .any(|f| matches!(f.factor_type, crate::privileged_accounts::RiskFactorType::KerberoastableSpn)))
             .count();
 
+        // Count AS-REP Roastable accounts (DONT_REQUIRE_PREAUTH flag)
+        let asrep_roastable_accounts = accounts.iter()
+            .filter(|a| a.is_asrep_roastable)
+            .count();
+
+        // Count Tier 0 accounts not in Protected Users group
+        let tier0_not_in_protected_users = accounts.iter()
+            .filter(|a| matches!(a.highest_privilege_level, PrivilegeLevel::Tier0) && !a.in_protected_users)
+            .count();
+
         let mut accounts_by_group = HashMap::new();
         for group in &groups {
             accounts_by_group.insert(group.name.clone(), group.member_count);
@@ -1407,6 +1321,8 @@ impl ActiveDirectoryClient {
             accounts_with_stale_passwords,
             accounts_password_never_expires,
             kerberoastable_accounts,
+            asrep_roastable_accounts,
+            tier0_not_in_protected_users,
             privileged_groups: groups,
             accounts_by_group,
             overall_risk_score: 0,
@@ -1442,52 +1358,41 @@ impl ActiveDirectoryClient {
         privilege_level: PrivilegeLevel,
         is_protected: bool,
     ) -> Result<PrivilegedAccount> {
-        let dn = entry.attrs.get("distinguishedName")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-        
-        let sam = entry.attrs.get("sAMAccountName")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-        
-        let display_name = entry.attrs.get("displayName")
-            .and_then(|v| v.first())
-            .cloned()
+        let dn = entry.get_string_attr("distinguishedName");
+        let sam = entry.get_sam_account_name();
+        let display_name = entry.get_optional_attr("displayName")
             .unwrap_or_else(|| sam.clone());
-        
-        let email = entry.attrs.get("mail")
-            .and_then(|v| v.first())
-            .cloned();
-        
-        let uac = entry.attrs.get("userAccountControl")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(0);
-        
-        let is_enabled = (uac & 0x0002) == 0;
-        let is_locked = (uac & 0x0010) != 0;
-        let password_never_expires = (uac & 0x10000) != 0;
-        
-        let last_logon = entry.attrs.get("lastLogon")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<i64>().ok())
+        let email = entry.get_optional_attr("mail");
+
+        // Log warning if UAC is missing (important for security analysis)
+        let uac_attr = entry.get_optional_u32_attr("userAccountControl");
+        if uac_attr.is_none() && !sam.is_empty() {
+            warn!("userAccountControl attribute missing for account '{}'. Using default (0).", sam);
+        }
+        let uac = uac_attr.unwrap_or(0);
+
+        // Parse UAC flags using helper
+        let uac_flags = entry.get_uac_flags();
+        let is_enabled = uac_flags.is_enabled();
+        let is_locked = uac_flags.is_locked;
+        let password_never_expires = uac_flags.password_never_expires;
+        let is_asrep_roastable = uac_flags.is_asrep_roastable;
+
+        // Check if member of Protected Users group
+        // Protected Users is always in CN=Protected Users,CN=Users,<domain>
+        let member_of = entry.get_multi_attr("memberOf");
+        let in_protected_users = member_of.iter()
+            .any(|g| g.to_lowercase().contains("cn=protected users,cn=users,"));
+
+        let last_logon = entry.get_optional_i64_attr("lastLogon")
             .map(|ft| self.filetime_to_rfc3339(ft));
-        
-        let password_last_set = entry.attrs.get("pwdLastSet")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<i64>().ok())
+
+        let password_last_set = entry.get_optional_i64_attr("pwdLastSet")
             .map(|ft| self.filetime_to_rfc3339(ft));
-        
-        let has_spn = entry.attrs.get("servicePrincipalName")
-            .map(|v| !v.is_empty())
-            .unwrap_or(false);
-        
-        let admin_count = entry.attrs.get("adminCount")
-            .and_then(|v| v.first())
-            .and_then(|v| v.parse::<i32>().ok())
-            .unwrap_or(0);
+
+        let has_spn = entry.has_values("servicePrincipalName");
+
+        let admin_count = entry.get_u32_attr("adminCount") as i32;
         
         // Determine account type
         let account_type = if sam.to_lowercase().contains("svc") || has_spn {
@@ -1520,6 +1425,9 @@ impl ActiveDirectoryClient {
             risk_factors: vec![],
             is_sensitive: false,
             is_protected: admin_count > 0 || is_protected,
+            is_asrep_roastable,
+            in_protected_users,
+            user_account_control: uac,
         })
     }
 
@@ -1569,9 +1477,8 @@ impl ActiveDirectoryClient {
             .next()
             .and_then(|e| {
                 let entry = SearchEntry::construct(e);
-                entry.attrs.get("msDS-Behavior-Version")
-                    .and_then(|v| v.first())
-                    .map(|s| FunctionalLevel::from_str(s))
+                entry.get_optional_attr("msDS-Behavior-Version")
+                    .map(|s| FunctionalLevel::from_str(&s))
             })
             .unwrap_or(FunctionalLevel::Unknown("Unknown".to_string()));
         info!("audit_domain_security: Domain level = {:?}", domain_level.display_name());
@@ -1637,9 +1544,7 @@ impl ActiveDirectoryClient {
             .next()
             .map(|e| {
                 let entry = SearchEntry::construct(e);
-                entry.attrs.get("msDS-EnabledFeatureBL")
-                    .map(|v| !v.is_empty())
-                    .unwrap_or(false)
+                entry.has_values("msDS-EnabledFeatureBL")
             })
             .unwrap_or(false);
         info!("audit_domain_security: Recycle bin enabled = {}", recycle_bin_enabled);
@@ -1877,50 +1782,30 @@ impl ActiveDirectoryClient {
 
     // Helper method to parse password policy
     fn parse_password_policy(&self, entry: &SearchEntry) -> PasswordPolicy {
-        let min_pwd_length = entry.attrs.get("minPwdLength")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(7);
+        let min_pwd_length = entry.get_optional_u32_attr("minPwdLength").unwrap_or(7);
+        let pwd_history = entry.get_optional_u32_attr("pwdHistoryLength").unwrap_or(24);
 
-        let pwd_history = entry.attrs.get("pwdHistoryLength")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(24);
-
-        let max_pwd_age = entry.attrs.get("maxPwdAge")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<i64>().ok())
-            .map(|v| (v.abs() / 864_000_000_000) as u32) // Convert 100-ns to days
+        // Convert 100-ns intervals to days
+        let max_pwd_age = entry.get_optional_i64_attr("maxPwdAge")
+            .map(|v| (v.abs() / 864_000_000_000) as u32)
             .unwrap_or(42);
 
-        let min_pwd_age = entry.attrs.get("minPwdAge")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<i64>().ok())
+        let min_pwd_age = entry.get_optional_i64_attr("minPwdAge")
             .map(|v| (v.abs() / 864_000_000_000) as u32)
             .unwrap_or(1);
 
-        let pwd_properties = entry.attrs.get("pwdProperties")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(1);
-
+        let pwd_properties = entry.get_optional_u32_attr("pwdProperties").unwrap_or(1);
         let complexity_enabled = (pwd_properties & 1) != 0;
         let reversible_encryption = (pwd_properties & 16) != 0;
 
-        let lockout_threshold = entry.attrs.get("lockoutThreshold")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let lockout_threshold = entry.get_u32_attr("lockoutThreshold");
 
-        let lockout_duration = entry.attrs.get("lockoutDuration")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<i64>().ok())
-            .map(|v| (v.abs() / 600_000_000) as u32) // Convert to minutes
+        // Convert 100-ns intervals to minutes
+        let lockout_duration = entry.get_optional_i64_attr("lockoutDuration")
+            .map(|v| (v.abs() / 600_000_000) as u32)
             .unwrap_or(30);
 
-        let lockout_window = entry.attrs.get("lockOutObservationWindow")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<i64>().ok())
+        let lockout_window = entry.get_optional_i64_attr("lockOutObservationWindow")
             .map(|v| (v.abs() / 600_000_000) as u32)
             .unwrap_or(30);
 
@@ -1939,63 +1824,24 @@ impl ActiveDirectoryClient {
 
     // Helper to parse legacy computer entry
     fn parse_legacy_computer(&self, entry: &SearchEntry) -> LegacyComputer {
-        let name = entry.attrs.get("cn")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-
-        let dn = entry.attrs.get("distinguishedName")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-
-        let os = entry.attrs.get("operatingSystem")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-
-        let os_version = entry.attrs.get("operatingSystemVersion")
-            .and_then(|v| v.first())
-            .cloned();
-
-        let last_logon = entry.attrs.get("lastLogonTimestamp")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<i64>().ok())
+        let last_logon = entry.get_optional_i64_attr("lastLogonTimestamp")
             .map(|ft| self.filetime_to_rfc3339(ft));
 
-        let uac = entry.attrs.get("userAccountControl")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
-
-        let is_enabled = (uac & 2) == 0;
+        let uac_flags = entry.get_uac_flags();
 
         LegacyComputer {
-            name,
-            distinguished_name: dn,
-            operating_system: os,
-            operating_system_version: os_version,
+            name: entry.get_string_attr("cn"),
+            distinguished_name: entry.get_string_attr("distinguishedName"),
+            operating_system: entry.get_string_attr("operatingSystem"),
+            operating_system_version: entry.get_optional_attr("operatingSystemVersion"),
             last_logon,
-            is_enabled,
+            is_enabled: uac_flags.is_enabled(),
         }
     }
 
     // Helper to parse Azure SSO account
     fn parse_azure_sso_account(&self, entry: &SearchEntry) -> AzureSsoAccountStatus {
-        let sam = entry.attrs.get("sAMAccountName")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-
-        let dn = entry.attrs.get("distinguishedName")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-
-        let pwd_last_set = entry.attrs.get("pwdLastSet")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<i64>().ok())
-            .unwrap_or(0);
+        let pwd_last_set = entry.get_i64_attr("pwdLastSet");
 
         let password_last_set = if pwd_last_set > 0 {
             Some(self.filetime_to_rfc3339(pwd_last_set))
@@ -2009,57 +1855,33 @@ impl ActiveDirectoryClient {
             None
         };
 
-        let uac = entry.attrs.get("userAccountControl")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
-
-        let is_enabled = (uac & 2) == 0;
+        let uac_flags = entry.get_uac_flags();
         let needs_rotation = password_age_days.map(|d| d > 30).unwrap_or(true);
 
         AzureSsoAccountStatus {
-            sam_account_name: sam,
-            distinguished_name: dn,
+            sam_account_name: entry.get_sam_account_name(),
+            distinguished_name: entry.get_string_attr("distinguishedName"),
             password_last_set,
             password_age_days,
-            is_enabled,
+            is_enabled: uac_flags.is_enabled(),
             needs_rotation,
         }
     }
 
     // Helper to parse GPO entry
     async fn parse_gpo_entry(&self, entry: &SearchEntry, ldap: LdapConn) -> Result<(GroupPolicyObject, LdapConn)> {
-        let id = entry.attrs.get("cn")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
-
-        let display_name = entry.attrs.get("displayName")
-            .and_then(|v| v.first())
-            .cloned()
+        let id = entry.get_string_attr("cn");
+        let display_name = entry.get_optional_attr("displayName")
             .unwrap_or_else(|| id.clone());
+        let path = entry.get_string_attr("gPCFileSysPath");
 
-        let path = entry.attrs.get("gPCFileSysPath")
-            .and_then(|v| v.first())
-            .cloned()
-            .unwrap_or_default();
+        let created = entry.get_optional_attr("whenCreated")
+            .map(|s| self.parse_ad_timestamp(&s));
+        let modified = entry.get_optional_attr("whenChanged")
+            .map(|s| self.parse_ad_timestamp(&s));
 
-        let created = entry.attrs.get("whenCreated")
-            .and_then(|v| v.first())
-            .map(|s| self.parse_ad_timestamp(s));
-
-        let modified = entry.attrs.get("whenChanged")
-            .and_then(|v| v.first())
-            .map(|s| self.parse_ad_timestamp(s));
-
-        let flags = entry.attrs.get("flags")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
-
-        let wmi_filter = entry.attrs.get("gPCWQLFilter")
-            .and_then(|v| v.first())
-            .cloned();
+        let flags = entry.get_u32_attr("flags");
+        let wmi_filter = entry.get_optional_attr("gPCWQLFilter");
 
         // Find GPO links by searching for gPLink attributes
         let (links, ldap) = self.find_gpo_links(&id, ldap).await?;
@@ -2113,21 +1935,11 @@ impl ActiveDirectoryClient {
         for entry in rs {
             let entry = SearchEntry::construct(entry);
 
-            let ou_dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let ou_name = entry.attrs.get("name")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
+            let ou_dn = entry.get_string_attr("distinguishedName");
+            let ou_name = entry.get_string_attr("name");
 
             // Parse gPLink to get enforcement status
-            let gp_link = entry.attrs.get("gPLink")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
+            let gp_link = entry.get_string_attr("gPLink");
 
             let enforced = gp_link.contains(";2]") || gp_link.contains(";3]");
             let link_enabled = !gp_link.contains(";1]") && !gp_link.contains(";3]");
@@ -2147,16 +1959,16 @@ impl ActiveDirectoryClient {
     // Parse GPO permissions from nTSecurityDescriptor
     async fn parse_gpo_permissions(&self, entry: &SearchEntry, ldap: LdapConn) -> Result<(Vec<GpoPermissionEntry>, LdapConn)> {
         // Get nTSecurityDescriptor binary attribute
-        let sd_bytes = match entry.bin_attrs.get("nTSecurityDescriptor") {
-            Some(values) if !values.is_empty() => &values[0],
-            _ => {
+        let sd_bytes = match entry.get_binary_attr("nTSecurityDescriptor") {
+            Some(bytes) => bytes,
+            None => {
                 warn!("No nTSecurityDescriptor found for GPO");
                 return Ok((Vec::new(), ldap));
             }
         };
 
         // Parse security descriptor
-        let sd = crate::ldap_utils::parse_security_descriptor(sd_bytes)
+        let sd = crate::ldap_utils::parse_security_descriptor(&sd_bytes)
             .map_err(|e| anyhow!("Failed to parse security descriptor: {}", e))?;
 
         let mut permissions = Vec::new();
@@ -2277,11 +2089,9 @@ impl ActiveDirectoryClient {
                     if let Some(entry) = rs.into_iter().next() {
                         let entry = SearchEntry::construct(entry);
 
-                        // Get the name
-                        let name = entry.attrs.get("sAMAccountName")
-                            .or_else(|| entry.attrs.get("cn"))
-                            .and_then(|v| v.first())
-                            .cloned()
+                        // Get the name - prefer sAMAccountName, fall back to cn
+                        let name = entry.get_optional_attr("sAMAccountName")
+                            .or_else(|| entry.get_optional_attr("cn"))
                             .unwrap_or_else(|| sid.to_string());
 
                         return Ok((name, ldap));
@@ -2853,7 +2663,7 @@ impl ActiveDirectoryClient {
             .ok_or_else(|| anyhow!("No nTSecurityDescriptor found"))?;
 
         // Parse security descriptor
-        let sd = crate::ldap_utils::parse_security_descriptor(sd_bytes)
+        let sd = crate::ldap_utils::parse_security_descriptor(&sd_bytes)
             .map_err(|e| anyhow!("Failed to parse security descriptor: {}", e))?;
 
         let object_dn = entry
@@ -3257,25 +3067,15 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
+            let sam = entry.get_sam_account_name();
 
             // Skip krbtgt
             if sam.to_lowercase() == "krbtgt" {
                 continue;
             }
 
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let member_of = entry.attrs.get("memberOf")
-                .cloned()
-                .unwrap_or_default();
+            let dn = entry.get_string_attr("distinguishedName");
+            let member_of = entry.get_multi_attr("memberOf");
 
             // Check if user is actually in a protected group
             let in_protected_group = member_of.iter().any(|group| {
@@ -3310,19 +3110,11 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let name = entry.attrs.get("cn")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let object_class = entry.attrs.get("objectClass")
-                .and_then(|v| v.last())
+            let name = entry.get_string_attr("cn");
+            let dn = entry.get_string_attr("distinguishedName");
+            // Get last objectClass (most specific)
+            let object_class = entry.get_multi_attr("objectClass")
+                .last()
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
 
@@ -3355,22 +3147,10 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
             // Parse SID history (in production, parse binary SID)
-            // For now, simulate detection
-            let sid_history = entry.attrs.get("sIDHistory")
-                .cloned()
-                .unwrap_or_default();
+            let sid_history = entry.get_multi_attr("sIDHistory");
 
             for sid in sid_history {
                 let is_same_domain = sid.starts_with(&domain_sid);
@@ -3421,9 +3201,9 @@ impl ActiveDirectoryClient {
         );
 
         // Get nTSecurityDescriptor binary attribute
-        let sd_bytes = match entry.bin_attrs.get("nTSecurityDescriptor") {
-            Some(values) if !values.is_empty() => values[0].clone(),
-            _ => {
+        let sd_bytes = match entry.get_binary_attr("nTSecurityDescriptor") {
+            Some(bytes) => bytes,
+            None => {
                 warn!("No nTSecurityDescriptor found for domain root");
                 return Ok(ldap);
             }
@@ -3519,10 +3299,7 @@ impl ActiveDirectoryClient {
 
             if let Some(entry) = rs.into_iter().next() {
                 let entry = SearchEntry::construct(entry);
-
-                let members = entry.attrs.get("member")
-                    .cloned()
-                    .unwrap_or_default();
+                let members = entry.get_multi_attr("member");
 
                 for member_dn in members {
                     // Get member info
@@ -3558,14 +3335,10 @@ impl ActiveDirectoryClient {
 
         if let Some(entry) = rs.into_iter().next() {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let object_class = entry.attrs.get("objectClass")
-                .and_then(|v| v.last())
+            let sam = entry.get_sam_account_name();
+            // Get last objectClass (most specific)
+            let object_class = entry.get_multi_attr("objectClass")
+                .last()
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
 
@@ -3593,19 +3366,11 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let uac = entry.attrs.get("userAccountControl")
-                .and_then(|v| v.first())
-                .and_then(|v| v.parse::<u32>().ok())
-                .unwrap_or(0);
+            let sam = entry.get_sam_account_name();
+            let uac_flags = entry.get_uac_flags();
 
             // Check for PASSWORD_NOT_REQUIRED (0x0020)
-            if uac & 0x0020 != 0 {
+            if uac_flags.raw_value & 0x0020 != 0 {
                 audit.add_weak_password_config(WeakPasswordConfig {
                     account: sam.clone(),
                     issue: "Password Not Required".to_string(),
@@ -3613,8 +3378,8 @@ impl ActiveDirectoryClient {
                 });
             }
 
-            // Check for reversible encryption (0x0080)
-            if uac & 0x0080 != 0 {
+            // Check for reversible encryption
+            if uac_flags.reversible_encryption {
                 audit.add_weak_password_config(WeakPasswordConfig {
                     account: sam.clone(),
                     issue: "Reversible Encryption Enabled".to_string(),
@@ -3622,8 +3387,8 @@ impl ActiveDirectoryClient {
                 });
             }
 
-            // Check for DONT_EXPIRE_PASSWORD (0x10000)
-            if uac & 0x10000 != 0 {
+            // Check for password never expires
+            if uac_flags.password_never_expires {
                 audit.add_weak_password_config(WeakPasswordConfig {
                     account: sam.clone(),
                     issue: "Password Never Expires".to_string(),
@@ -3647,10 +3412,8 @@ impl ActiveDirectoryClient {
 
         if let Some(entry) = rs.into_iter().next() {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            if let Some(values) = search_entry.attrs.get("configurationNamingContext") {
-                if let Some(config_dn) = values.first() {
-                    return Ok((config_dn.clone(), ldap));
-                }
+            if let Some(config_dn) = search_entry.get_optional_attr("configurationNamingContext") {
+                return Ok((config_dn, ldap));
             }
         }
 
@@ -3700,14 +3463,9 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            let template_name = search_entry.attrs.get("cn")
-                .and_then(|v| v.first())
-                .unwrap_or(&"Unknown".to_string())
-                .clone();
-            let template_dn = search_entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .unwrap_or(&"".to_string())
-                .clone();
+            let template_name = search_entry.get_optional_attr("cn")
+                .unwrap_or_else(|| "Unknown".to_string());
+            let template_dn = search_entry.get_string_attr("distinguishedName");
 
             // Check ESC1, ESC2, ESC3, ESC4
             let _ = self.check_esc1(&search_entry, &template_name, &template_dn, audit);
@@ -3734,21 +3492,22 @@ impl ActiveDirectoryClient {
         use crate::ldap_utils::parse_security_descriptor;
 
         // ESC1: Template allows ENROLLEE_SUPPLIES_SUBJECT and has dangerous EKU
-        let name_flag = entry.attrs.get("msPKI-Certificate-Name-Flag")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
+        let name_flag = entry.get_u32_attr("msPKI-Certificate-Name-Flag");
 
         // Check if ENROLLEE_SUPPLIES_SUBJECT is set
         if (name_flag & CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT) == 0 {
             return Ok(()); // Not vulnerable to ESC1
         }
 
-        // Check for dangerous EKUs
-        let ekus = entry.attrs.get("pKIExtendedKeyUsage")
-            .or_else(|| entry.attrs.get("msPKI-Certificate-Application-Policy"))
-            .map(|v| v.clone())
-            .unwrap_or_default();
+        // Check for dangerous EKUs - try both possible attribute names
+        let ekus = {
+            let primary = entry.get_multi_attr("pKIExtendedKeyUsage");
+            if primary.is_empty() {
+                entry.get_multi_attr("msPKI-Certificate-Application-Policy")
+            } else {
+                primary
+            }
+        };
 
         let has_dangerous_eku = ekus.iter().any(|eku| {
             eku == CLIENT_AUTHENTICATION_EKU ||
@@ -3761,10 +3520,7 @@ impl ActiveDirectoryClient {
         }
 
         // Check if manager approval is required (mitigates ESC1)
-        let enrollment_flag = entry.attrs.get("msPKI-Enrollment-Flag")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
+        let enrollment_flag = entry.get_u32_attr("msPKI-Enrollment-Flag");
 
         const CT_FLAG_PEND_ALL_REQUESTS: u32 = 0x00000002;
         if (enrollment_flag & CT_FLAG_PEND_ALL_REQUESTS) != 0 {
@@ -3772,18 +3528,15 @@ impl ActiveDirectoryClient {
         }
 
         // Check if authorized signatures are required
-        let required_signatures = entry.attrs.get("msPKI-RA-Signature")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
+        let required_signatures = entry.get_u32_attr("msPKI-RA-Signature");
 
         if required_signatures > 0 {
             return Ok(()); // Signatures required - mitigated
         }
 
         // Check who can enroll
-        if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-            if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+        if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+            if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                 for ace in &sd.dacl {
                     // Check for Certificate-Enrollment extended right or GenericAll
                     if self.ace_grants_certificate_enrollment(ace) {
@@ -3838,8 +3591,8 @@ impl ActiveDirectoryClient {
         use crate::ldap_utils::parse_security_descriptor;
 
         // ESC4: Write access to certificate template object
-        if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-            if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+        if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+            if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                 for ace in &sd.dacl {
                     // Check for write access that could modify template settings
                     if self.ace_grants_template_write(ace) {
@@ -3925,13 +3678,11 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            let ca_name = search_entry.attrs.get("cn")
-                .and_then(|v| v.first())
-                .unwrap_or(&"Unknown".to_string())
-                .clone();
-            let dns_hostname = search_entry.attrs.get("dNSHostName")
-                .and_then(|v| v.first())
-                .cloned();
+            let ca_name = {
+                let name = search_entry.get_string_attr("cn");
+                if name.is_empty() { "Unknown".to_string() } else { name }
+            };
+            let dns_hostname = search_entry.get_optional_attr("dNSHostName");
 
             if let Some(hostname) = dns_hostname {
                 // Check if web enrollment is likely enabled (we can't directly check IIS config via LDAP)
@@ -3952,10 +3703,15 @@ impl ActiveDirectoryClient {
         use crate::ldap_utils::parse_security_descriptor;
 
         // ESC2: Template allows Any Purpose EKU or no EKU (similar risk to ESC1)
-        let ekus = entry.attrs.get("pKIExtendedKeyUsage")
-            .or_else(|| entry.attrs.get("msPKI-Certificate-Application-Policy"))
-            .map(|v| v.clone())
-            .unwrap_or_default();
+        // Check for dangerous EKUs - try both possible attribute names
+        let ekus = {
+            let primary = entry.get_multi_attr("pKIExtendedKeyUsage");
+            if primary.is_empty() {
+                entry.get_multi_attr("msPKI-Certificate-Application-Policy")
+            } else {
+                primary
+            }
+        };
 
         // Check if Any Purpose EKU is present or no EKU at all
         let has_any_purpose = ekus.iter().any(|eku| eku == ANY_PURPOSE_EKU);
@@ -3966,10 +3722,7 @@ impl ActiveDirectoryClient {
         }
 
         // Check if manager approval is required (mitigates ESC2)
-        let enrollment_flag = entry.attrs.get("msPKI-Enrollment-Flag")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
+        let enrollment_flag = entry.get_u32_attr("msPKI-Enrollment-Flag");
 
         const CT_FLAG_PEND_ALL_REQUESTS: u32 = 0x00000002;
         if (enrollment_flag & CT_FLAG_PEND_ALL_REQUESTS) != 0 {
@@ -3977,8 +3730,8 @@ impl ActiveDirectoryClient {
         }
 
         // Check who can enroll
-        if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-            if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+        if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+            if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                 for ace in &sd.dacl {
                     if self.ace_grants_certificate_enrollment(ace) {
                         let sid_str = &ace.trustee_sid;
@@ -4004,10 +3757,14 @@ impl ActiveDirectoryClient {
         use crate::ldap_utils::parse_security_descriptor;
 
         // ESC3: Template allows Certificate Request Agent EKU
-        let ekus = entry.attrs.get("pKIExtendedKeyUsage")
-            .or_else(|| entry.attrs.get("msPKI-Certificate-Application-Policy"))
-            .map(|v| v.clone())
-            .unwrap_or_default();
+        let ekus = {
+            let primary = entry.get_multi_attr("pKIExtendedKeyUsage");
+            if primary.is_empty() {
+                entry.get_multi_attr("msPKI-Certificate-Application-Policy")
+            } else {
+                primary
+            }
+        };
 
         // Check if Certificate Request Agent EKU is present
         let has_request_agent_eku = ekus.iter().any(|eku| eku == CERTIFICATE_REQUEST_AGENT_EKU);
@@ -4017,14 +3774,11 @@ impl ActiveDirectoryClient {
         }
 
         // Check authorized signatures requirement
-        let required_signatures = entry.attrs.get("msPKI-RA-Signature")
-            .and_then(|v| v.first())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
+        let required_signatures = entry.get_u32_attr("msPKI-RA-Signature");
 
         // Check who can enroll
-        if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-            if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+        if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+            if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                 for ace in &sd.dacl {
                     if self.ace_grants_certificate_enrollment(ace) {
                         let sid_str = &ace.trustee_sid;
@@ -4082,8 +3836,8 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            if let Some(sd_bytes) = search_entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = search_entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     for ace in &sd.dacl {
                         if self.ace_grants_template_write(ace) {
                             let sid_str = &ace.trustee_sid;
@@ -4125,8 +3879,8 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            if let Some(sd_bytes) = search_entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = search_entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     for ace in &sd.dacl {
                         if self.ace_grants_template_write(ace) {
                             let sid_str = &ace.trustee_sid;
@@ -4174,18 +3928,15 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            let ca_name = search_entry.attrs.get("cn")
-                .and_then(|v| v.first())
-                .unwrap_or(&"Unknown".to_string())
-                .clone();
-            let ca_dn = search_entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .unwrap_or(&"".to_string())
-                .clone();
+            let ca_name = {
+                let name = search_entry.get_string_attr("cn");
+                if name.is_empty() { "Unknown".to_string() } else { name }
+            };
+            let ca_dn = search_entry.get_string_attr("distinguishedName");
 
             // Check ACL for ManageCA and ManageCertificates rights
-            if let Some(sd_bytes) = search_entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = search_entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     for ace in &sd.dacl {
                         let sid_str = &ace.trustee_sid;
                         if !self.is_legitimate_principal(sid_str) {
@@ -4255,30 +4006,18 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            let sam = search_entry.attrs.get("samAccountName")
-                .and_then(|v| v.first())
-                .unwrap_or(&"Unknown".to_string())
-                .clone();
-            let dn = search_entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .unwrap_or(&"".to_string())
-                .clone();
-            let description = search_entry.attrs.get("description")
-                .and_then(|v| v.first())
-                .cloned();
-
-            // Check if account is enabled
-            let uac = search_entry.attrs.get("userAccountControl")
-                .and_then(|v| v.first())
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(0);
-
-            let is_disabled = (uac & 0x0002) != 0;
+            let sam = {
+                let name = search_entry.get_string_attr("sAMAccountName");
+                if name.is_empty() { "Unknown".to_string() } else { name }
+            };
+            let dn = search_entry.get_string_attr("distinguishedName");
+            let description = search_entry.get_optional_attr("description");
+            let uac_flags = search_entry.get_uac_flags();
 
             audit.add_azure_ad_connect(crate::da_equivalence::AzureADConnect {
-                account_name: sam.clone(),
-                distinguished_name: dn.clone(),
-                is_enabled: !is_disabled,
+                account_name: sam,
+                distinguished_name: dn,
+                is_enabled: uac_flags.is_enabled(),
                 description,
             });
         }
@@ -4313,18 +4052,15 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            let computer_name = search_entry.attrs.get("cn")
-                .and_then(|v| v.first())
-                .unwrap_or(&"Unknown".to_string())
-                .clone();
-            let _computer_dn = search_entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .unwrap_or(&"".to_string())
-                .clone();
+            let computer_name = {
+                let name = search_entry.get_string_attr("cn");
+                if name.is_empty() { "Unknown".to_string() } else { name }
+            };
+            let _computer_dn = search_entry.get_string_attr("distinguishedName");
 
             // Check ACL for read access to LAPS password
-            if let Some(sd_bytes) = search_entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = search_entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     for ace in &sd.dacl {
                         // Check for read access to ms-Mcs-AdmPwd attribute
                         if self.ace_grants_laps_read(ace, LAPS_PASSWORD_GUID) {
@@ -4402,19 +4138,14 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let search_entry = ldap3::SearchEntry::construct(entry);
-            let gmsa_name = search_entry.attrs.get("cn")
-                .and_then(|v| v.first())
-                .unwrap_or(&"Unknown".to_string())
-                .clone();
-            let _gmsa_dn = search_entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .unwrap_or(&"".to_string())
-                .clone();
+            let gmsa_name = {
+                let name = search_entry.get_string_attr("cn");
+                if name.is_empty() { "Unknown".to_string() } else { name }
+            };
+            let _gmsa_dn = search_entry.get_string_attr("distinguishedName");
 
             // Check group memberships
-            let member_of = search_entry.attrs.get("memberOf")
-                .map(|v| v.clone())
-                .unwrap_or_default();
+            let member_of = search_entry.get_multi_attr("memberOf");
 
             let is_privileged = member_of.iter().any(|group| {
                 group.contains("Domain Admins") ||
@@ -4557,21 +4288,9 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let script_path = entry.attrs.get("scriptPath")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
+            let script_path = entry.get_string_attr("scriptPath");
 
             if !script_path.is_empty() {
                 audit.add_legacy_logon_script(crate::da_equivalence::LegacyLogonScript {
@@ -4608,20 +4327,9 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let object_class = entry.attrs.get("objectClass")
-                .map(|v| v.clone())
-                .unwrap_or_default();
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
+            let object_class = entry.get_multi_attr("objectClass");
 
             let account_type = if object_class.contains(&"computer".to_string()) {
                 "Computer"
@@ -4629,13 +4337,8 @@ impl ActiveDirectoryClient {
                 "User"
             };
 
-            let spns = entry.attrs.get("servicePrincipalName")
-                .map(|v| v.clone())
-                .unwrap_or_default();
-
-            let operating_system = entry.attrs.get("operatingSystem")
-                .and_then(|v| v.first())
-                .cloned();
+            let spns = entry.get_multi_attr("servicePrincipalName");
+            let operating_system = entry.get_optional_attr("operatingSystem");
 
             audit.add_unconstrained_delegation(crate::da_equivalence::UnconstrainedDelegation {
                 account_name: sam,
@@ -4675,20 +4378,9 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let object_class = entry.attrs.get("objectClass")
-                .map(|v| v.clone())
-                .unwrap_or_default();
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
+            let object_class = entry.get_multi_attr("objectClass");
 
             let target_type = if object_class.contains(&"computer".to_string()) {
                 "Computer"
@@ -4697,8 +4389,8 @@ impl ActiveDirectoryClient {
             };
 
             // Parse security descriptor
-            if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     // Check each ACE for write access to msDS-KeyCredentialLink
                     // GUID: 5b47d60f-6090-40b2-9f37-2a4de88f3063
                     const KEY_CREDENTIAL_LINK_GUID: &str = "5b47d60f-6090-40b2-9f37-2a4de88f3063";
@@ -4750,22 +4442,11 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
 
             // Prioritize privileged accounts
-            let admin_count = entry.attrs.get("adminCount")
-                .and_then(|v| v.first())
-                .and_then(|v| v.parse::<i32>().ok())
-                .unwrap_or(0);
+            let admin_count = entry.get_u32_attr("adminCount");
 
             // Only check privileged accounts to reduce noise
             if admin_count != 1 {
@@ -4773,8 +4454,8 @@ impl ActiveDirectoryClient {
             }
 
             // Parse security descriptor
-            if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     // Check each ACE for write access to servicePrincipalName
                     // GUID: f3a64788-5306-11d1-a9c5-0000f80367c1
                     const SPN_GUID: &str = "f3a64788-5306-11d1-a9c5-0000f80367c1";
@@ -4828,20 +4509,12 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
 
             // Parse security descriptor
-            if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     // User-Force-Change-Password extended right GUID
                     const PASSWORD_RESET_GUID: &str = "00299570-246d-11d0-a768-00aa006e0529";
 
@@ -4916,20 +4589,12 @@ impl ActiveDirectoryClient {
 
             for entry in rs {
                 let entry = SearchEntry::construct(entry);
-
-                let cn = entry.attrs.get("cn")
-                    .and_then(|v| v.first())
-                    .cloned()
-                    .unwrap_or_default();
-
-                let dn = entry.attrs.get("distinguishedName")
-                    .and_then(|v| v.first())
-                    .cloned()
-                    .unwrap_or_default();
+                let cn = entry.get_string_attr("cn");
+                let dn = entry.get_string_attr("distinguishedName");
 
                 // Parse security descriptor
-                if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                    if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+                if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+                    if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                         // member attribute GUID
                         const MEMBER_GUID: &str = "bf9679c0-0de6-11d0-a285-00aa003049e2";
 
@@ -4996,27 +4661,14 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let primary_group_id = entry.attrs.get("primaryGroupID")
-                .and_then(|v| v.first())
-                .and_then(|v| v.parse::<u32>().ok())
-                .unwrap_or(0);
-
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
+            let primary_group_id = entry.get_u32_attr("primaryGroupID");
             let is_dc = primary_group_id == 516;
 
             // Parse security descriptor
-            if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     // msDS-AllowedToActOnBehalfOfOtherIdentity GUID
                     const RBCD_GUID: &str = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79";
 
@@ -5065,27 +4717,14 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let primary_group_id = entry.attrs.get("primaryGroupID")
-                .and_then(|v| v.first())
-                .and_then(|v| v.parse::<u32>().ok())
-                .unwrap_or(0);
-
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
+            let primary_group_id = entry.get_u32_attr("primaryGroupID");
             let is_dc = primary_group_id == 516;
 
             // Parse security descriptor
-            if let Some(sd_bytes) = entry.bin_attrs.get("nTSecurityDescriptor").and_then(|v| v.first()) {
-                if let Ok(sd) = parse_security_descriptor(sd_bytes) {
+            if let Some(sd_bytes) = entry.get_binary_attr("nTSecurityDescriptor") {
+                if let Ok(sd) = parse_security_descriptor(&sd_bytes) {
                     for ace in &sd.dacl {
                         // Skip legitimate principals
                         if self.is_legitimate_principal(&ace.trustee_sid) {
@@ -5126,11 +4765,12 @@ impl ActiveDirectoryClient {
         let mut dc_hostnames = Vec::new();
         for entry in dc_rs {
             let entry = SearchEntry::construct(entry);
-
-            if let Some(hostname) = entry.attrs.get("dNSHostName").and_then(|v| v.first()) {
-                dc_hostnames.push(hostname.to_lowercase());
+            let hostname = entry.get_optional_attr("dNSHostName");
+            if let Some(h) = hostname {
+                dc_hostnames.push(h.to_lowercase());
             }
-            if let Some(sam) = entry.attrs.get("sAMAccountName").and_then(|v| v.first()) {
+            let sam = entry.get_sam_account_name();
+            if !sam.is_empty() {
                 // Add SAM account name without trailing $
                 let sam_clean = sam.trim_end_matches('$');
                 dc_hostnames.push(sam_clean.to_lowercase());
@@ -5157,20 +4797,9 @@ impl ActiveDirectoryClient {
 
         for entry in rs {
             let entry = SearchEntry::construct(entry);
-
-            let sam = entry.attrs.get("sAMAccountName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let dn = entry.attrs.get("distinguishedName")
-                .and_then(|v| v.first())
-                .cloned()
-                .unwrap_or_default();
-
-            let delegation_targets = entry.attrs.get("msDS-AllowedToDelegateTo")
-                .map(|v| v.clone())
-                .unwrap_or_default();
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
+            let delegation_targets = entry.get_multi_attr("msDS-AllowedToDelegateTo");
 
             // Check if any delegation target is a DC
             for target in &delegation_targets {
@@ -5228,5 +4857,688 @@ impl ActiveDirectoryClient {
         }
 
         encoded
+    }
+
+    // ==========================================
+    // Infrastructure Security Audit Functions
+    // ==========================================
+
+    /// Test if anonymous LDAP bind is allowed
+    /// This is a security risk as it allows unauthenticated enumeration
+    pub async fn test_anonymous_ldap_bind(&self) -> bool {
+        use crate::ldap_timeout::DEFAULT_CONNECT_TIMEOUT;
+
+        let ldap_url = format!("ldap://{}:389", self.server.replace("ldap://", "").replace("ldaps://", "").split(':').next().unwrap_or(&self.server));
+
+        info!("Testing anonymous LDAP bind to {}", ldap_url);
+
+        // Try to connect and bind anonymously
+        match tokio::time::timeout(
+            DEFAULT_CONNECT_TIMEOUT,
+            tokio::task::spawn_blocking(move || {
+                match ldap3::LdapConn::new(&ldap_url) {
+                    Ok(mut conn) => {
+                        // Try anonymous bind (empty username and password)
+                        match conn.simple_bind("", "") {
+                            Ok(result) => {
+                                let _ = conn.unbind();
+                                result.success().is_ok()
+                            }
+                            Err(_) => false,
+                        }
+                    }
+                    Err(_) => false,
+                }
+            })
+        ).await {
+            Ok(Ok(result)) => result,
+            _ => false,
+        }
+    }
+
+    /// Check LDAP security settings including dsHeuristics
+    pub async fn check_ldap_security(&self) -> Result<crate::infrastructure_audit::LdapSecurityStatus> {
+        let ldap = self.get_connection().await?;
+
+        // Test anonymous bind capability
+        let anonymous_bind_allowed = self.test_anonymous_ldap_bind().await;
+
+        // Get configuration naming context
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            "",
+            Scope::Base,
+            "(objectClass=*)",
+            vec!["configurationNamingContext"],
+        ).await?;
+
+        let config_dn = rs.first()
+            .map(|e| SearchEntry::construct(e.clone()).get_string_attr("configurationNamingContext"))
+            .unwrap_or_default();
+
+        // Query dsHeuristics from Directory Service container
+        let ds_service_dn = format!("CN=Directory Service,CN=Windows NT,CN=Services,{}", config_dn);
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &ds_service_dn,
+            Scope::Base,
+            "(objectClass=*)",
+            vec!["dsHeuristics"],
+        ).await?;
+
+        let ds_heuristics = rs.first()
+            .map(|e| SearchEntry::construct(e.clone()).get_optional_attr("dsHeuristics"))
+            .flatten();
+
+        // 7th character controls anonymous access (0 = disabled, 2 = enabled)
+        let anonymous_access_setting = ds_heuristics.as_ref()
+            .and_then(|h| h.chars().nth(6));
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok(crate::infrastructure_audit::LdapSecurityStatus {
+            signing_required: None, // Would need registry/GPO access
+            channel_binding_required: None,
+            anonymous_bind_allowed,
+            ds_heuristics,
+            anonymous_access_setting,
+        })
+    }
+
+    /// Check for Print Spooler exposure on Domain Controllers
+    /// Print Spooler is vulnerable to PrintNightmare and SpoolSample attacks
+    pub async fn check_print_spooler_exposure(&self) -> Result<Vec<crate::infrastructure_audit::PrintSpoolerExposure>> {
+        let ldap = self.get_connection().await?;
+        let mut exposures = Vec::new();
+
+        // Find all Domain Controllers (SERVER_TRUST_ACCOUNT flag = 0x2000 = 8192)
+        let filter = "(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))";
+
+        let (rs, ldap) = self.paged_search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            filter,
+            vec![
+                "cn",
+                "distinguishedName",
+                "dNSHostName",
+                "servicePrincipalName",
+                "operatingSystem",
+            ],
+        ).await?;
+
+        for entry in rs {
+            let entry = SearchEntry::construct(entry);
+
+            let dc_name = entry.get_string_attr("cn");
+            let distinguished_name = entry.get_string_attr("distinguishedName");
+            let dns_hostname = entry.get_optional_attr("dNSHostName");
+            let operating_system = entry.get_optional_attr("operatingSystem");
+            let spns = entry.get_multi_attr("servicePrincipalName");
+
+            // Check for Print Spooler related SPNs
+            // Note: HOST/ SPN exists on ALL computers, not spooler-specific
+            // Real spooler indicators: PRINT/ SPNs or explicit spooler service
+            // We only flag actual print-related SPNs to avoid false positives
+            // Actual spooler status requires WMI - this is a heuristic only
+            let spooler_spns: Vec<String> = spns.iter()
+                .filter(|spn| {
+                    let lower = spn.to_lowercase();
+                    // Only flag actual print-related SPNs, not HOST/
+                    lower.starts_with("print/") || lower.contains("spooler")
+                })
+                .cloned()
+                .collect();
+
+            let spooler_spn_present = !spooler_spns.is_empty();
+
+            exposures.push(crate::infrastructure_audit::PrintSpoolerExposure {
+                dc_name,
+                distinguished_name,
+                dns_hostname,
+                spooler_spn_present,
+                spooler_spns,
+                operating_system,
+            });
+        }
+
+        Self::unbind_with_timeout(ldap).await;
+        Ok(exposures)
+    }
+
+    /// Check Authentication Silos configuration
+    /// Silos restrict where Tier 0 accounts can authenticate from
+    pub async fn check_authentication_silos(&self) -> Result<crate::infrastructure_audit::AuthSiloStatus> {
+        let ldap = self.get_connection().await?;
+
+        // Get configuration naming context
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            "",
+            Scope::Base,
+            "(objectClass=*)",
+            vec!["configurationNamingContext"],
+        ).await?;
+
+        let config_dn = rs.first()
+            .map(|e| SearchEntry::construct(e.clone()).get_string_attr("configurationNamingContext"))
+            .unwrap_or_default();
+
+        // Query Authentication Silos
+        let silo_base = format!("CN=AuthN Policy Configuration,CN=Services,{}", config_dn);
+        let filter = "(objectClass=msDS-AuthNPolicySilo)";
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &silo_base,
+            Scope::Subtree,
+            filter,
+            vec![
+                "cn",
+                "distinguishedName",
+                "description",
+                "msDS-AuthNPolicySiloMembers",
+                "msDS-UserTGTLifetime",
+                "msDS-AuthNPolicySiloEnforced",
+            ],
+        ).await?;
+
+        let mut silos = Vec::new();
+        for entry in rs {
+            let entry = SearchEntry::construct(entry);
+
+            let name = entry.get_string_attr("cn");
+            let description = entry.get_optional_attr("description");
+            let members = entry.get_multi_attr("msDS-AuthNPolicySiloMembers");
+            let tgt_lifetime = entry.get_optional_u32_attr("msDS-UserTGTLifetime");
+            let is_enforced = entry.get_optional_attr("msDS-AuthNPolicySiloEnforced")
+                .map(|v| v.to_uppercase() == "TRUE")
+                .unwrap_or(false);
+
+            silos.push(crate::infrastructure_audit::AuthenticationSilo {
+                name,
+                distinguished_name: entry.get_dn(),
+                description,
+                member_count: members.len(),
+                tgt_lifetime_minutes: tgt_lifetime,
+                is_enforced,
+                members,
+            });
+        }
+
+        // Find Tier 0 accounts not in any silo
+        // Query accounts with adminCount=1 that don't have silo assignment
+        let filter = "(&(objectClass=user)(objectCategory=person)(adminCount=1)(!(msDS-AssignedAuthNPolicySilo=*)))";
+
+        let (rs, ldap) = self.paged_search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            filter,
+            vec![
+                "sAMAccountName",
+                "distinguishedName",
+                "memberOf",
+            ],
+        ).await?;
+
+        let mut tier0_not_in_silo = Vec::new();
+        for entry in rs {
+            let entry = SearchEntry::construct(entry);
+
+            let sam = entry.get_sam_account_name();
+            let dn = entry.get_string_attr("distinguishedName");
+            let member_of = entry.get_multi_attr("memberOf");
+
+            let is_domain_admin = member_of.iter()
+                .any(|g| g.to_lowercase().contains("cn=domain admins,"));
+            let is_enterprise_admin = member_of.iter()
+                .any(|g| g.to_lowercase().contains("cn=enterprise admins,"));
+            let is_schema_admin = member_of.iter()
+                .any(|g| g.to_lowercase().contains("cn=schema admins,"));
+
+            tier0_not_in_silo.push(crate::infrastructure_audit::UnprotectedTier0Account {
+                sam_account_name: sam,
+                distinguished_name: dn,
+                is_domain_admin,
+                is_enterprise_admin,
+                is_schema_admin,
+            });
+        }
+
+        let silos_in_use = !silos.is_empty() && silos.iter().any(|s| s.member_count > 0);
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok(crate::infrastructure_audit::AuthSiloStatus {
+            silos_configured: silos.len(),
+            silos,
+            tier0_accounts_not_in_silo: tier0_not_in_silo,
+            silos_in_use,
+        })
+    }
+
+    /// Check Pre-Windows 2000 Compatible Access group membership
+    /// This group with Everyone or Anonymous Logon allows anonymous enumeration
+    pub async fn check_pre_2000_compatible_access(&self) -> Result<crate::infrastructure_audit::PreWindows2000Status> {
+        let ldap = self.get_connection().await?;
+
+        // Query the Pre-Windows 2000 Compatible Access group in Builtin container
+        let builtin_dn = format!("CN=Builtin,{}", self.base_dn);
+        let filter = "(cn=Pre-Windows 2000 Compatible Access)";
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &builtin_dn,
+            Scope::OneLevel,
+            filter,
+            vec!["member", "distinguishedName"],
+        ).await?;
+
+        let members = rs.first()
+            .map(|e| SearchEntry::construct(e.clone()))
+            .map(|e| e.get_multi_attr("member"))
+            .unwrap_or_default();
+
+        // Check for dangerous members
+        // S-1-1-0 = Everyone, S-1-5-7 = Anonymous Logon, S-1-5-11 = Authenticated Users
+        let mut anonymous_logon_member = false;
+        let mut everyone_member = false;
+        let mut authenticated_users_only = true;
+
+        for member in &members {
+            let lower = member.to_lowercase();
+            if lower.contains("s-1-5-7") || lower.contains("anonymous") {
+                anonymous_logon_member = true;
+                authenticated_users_only = false;
+            }
+            if lower.contains("s-1-1-0") || lower.contains("cn=everyone") {
+                everyone_member = true;
+                authenticated_users_only = false;
+            }
+            // Any member other than Authenticated Users means it's not authenticated_users_only
+            if !lower.contains("s-1-5-11") && !lower.contains("authenticated users") {
+                authenticated_users_only = false;
+            }
+        }
+
+        let has_dangerous_members = anonymous_logon_member || everyone_member;
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok(crate::infrastructure_audit::PreWindows2000Status {
+            group_exists: !rs.is_empty(), // Group exists if search returned results
+            has_dangerous_members,
+            members,
+            anonymous_logon_member,
+            everyone_member,
+            authenticated_users_only,
+        })
+    }
+
+    /// Enumerate Fine-Grained Password Policies (Password Settings Objects)
+    /// PSOs can override the Default Domain Policy for specific users/groups
+    pub async fn enumerate_fine_grained_password_policies(&self, domain_policy: &crate::domain_security::PasswordPolicy) -> Result<Vec<crate::infrastructure_audit::FineGrainedPasswordPolicy>> {
+        let ldap = self.get_connection().await?;
+        let mut policies = Vec::new();
+
+        // PSOs are stored in CN=Password Settings Container,CN=System,<domain>
+        let pso_container = format!("CN=Password Settings Container,CN=System,{}", self.base_dn);
+        let filter = "(objectClass=msDS-PasswordSettings)";
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &pso_container,
+            Scope::OneLevel,
+            filter,
+            vec![
+                "cn",
+                "distinguishedName",
+                "msDS-PasswordSettingsPrecedence",
+                "msDS-MinimumPasswordLength",
+                "msDS-PasswordHistoryLength",
+                "msDS-MaximumPasswordAge",
+                "msDS-MinimumPasswordAge",
+                "msDS-PasswordComplexityEnabled",
+                "msDS-PasswordReversibleEncryptionEnabled",
+                "msDS-LockoutThreshold",
+                "msDS-LockoutDuration",
+                "msDS-LockoutObservationWindow",
+                "msDS-PSOAppliesTo",
+            ],
+        ).await?;
+
+        for entry in rs {
+            let entry = SearchEntry::construct(entry);
+
+            let name = entry.get_string_attr("cn");
+            let distinguished_name = entry.get_string_attr("distinguishedName");
+            let precedence = entry.get_u32_attr("msDS-PasswordSettingsPrecedence");
+            let min_password_length = entry.get_u32_attr("msDS-MinimumPasswordLength");
+            let password_history_count = entry.get_u32_attr("msDS-PasswordHistoryLength");
+
+            // MaximumPasswordAge is stored as negative 100-nanosecond intervals
+            let max_password_age_raw = entry.get_i64_attr("msDS-MaximumPasswordAge");
+            let max_password_age_days = if max_password_age_raw == 0 {
+                0
+            } else {
+                (max_password_age_raw.abs() / 864_000_000_000) as u32
+            };
+
+            let min_password_age_raw = entry.get_i64_attr("msDS-MinimumPasswordAge");
+            let min_password_age_days = if min_password_age_raw == 0 {
+                0
+            } else {
+                (min_password_age_raw.abs() / 864_000_000_000) as u32
+            };
+
+            let complexity_enabled = entry.get_optional_attr("msDS-PasswordComplexityEnabled")
+                .map(|v| v.to_uppercase() == "TRUE")
+                .unwrap_or(true);
+
+            let reversible_encryption_enabled = entry.get_optional_attr("msDS-PasswordReversibleEncryptionEnabled")
+                .map(|v| v.to_uppercase() == "TRUE")
+                .unwrap_or(false);
+
+            let lockout_threshold = entry.get_u32_attr("msDS-LockoutThreshold");
+
+            let lockout_duration_raw = entry.get_i64_attr("msDS-LockoutDuration");
+            let lockout_duration_minutes = if lockout_duration_raw == 0 {
+                0
+            } else {
+                (lockout_duration_raw.abs() / 600_000_000) as u32
+            };
+
+            let lockout_observation_raw = entry.get_i64_attr("msDS-LockoutObservationWindow");
+            let lockout_observation_window_minutes = if lockout_observation_raw == 0 {
+                0
+            } else {
+                (lockout_observation_raw.abs() / 600_000_000) as u32
+            };
+
+            let applies_to = entry.get_multi_attr("msDS-PSOAppliesTo");
+
+            // Check if this PSO is weaker than domain policy
+            let mut weaknesses = Vec::new();
+
+            if min_password_length < domain_policy.min_password_length {
+                weaknesses.push(format!(
+                    "Minimum password length ({}) is less than domain policy ({})",
+                    min_password_length, domain_policy.min_password_length
+                ));
+            }
+
+            if password_history_count < domain_policy.password_history_count {
+                weaknesses.push(format!(
+                    "Password history ({}) is less than domain policy ({})",
+                    password_history_count, domain_policy.password_history_count
+                ));
+            }
+
+            if !complexity_enabled && domain_policy.complexity_enabled {
+                weaknesses.push("Password complexity is disabled while domain policy requires it".to_string());
+            }
+
+            if reversible_encryption_enabled && !domain_policy.reversible_encryption_enabled {
+                weaknesses.push("Reversible encryption is enabled while domain policy disables it".to_string());
+            }
+
+            if lockout_threshold == 0 && domain_policy.lockout_threshold > 0 {
+                weaknesses.push("Account lockout is disabled while domain policy enables it".to_string());
+            } else if lockout_threshold > domain_policy.lockout_threshold && domain_policy.lockout_threshold > 0 {
+                weaknesses.push(format!(
+                    "Lockout threshold ({}) is higher than domain policy ({})",
+                    lockout_threshold, domain_policy.lockout_threshold
+                ));
+            }
+
+            let is_weaker_than_domain = !weaknesses.is_empty();
+
+            policies.push(crate::infrastructure_audit::FineGrainedPasswordPolicy {
+                name,
+                distinguished_name,
+                precedence,
+                min_password_length,
+                password_history_count,
+                max_password_age_days,
+                min_password_age_days,
+                complexity_enabled,
+                reversible_encryption_enabled,
+                lockout_threshold,
+                lockout_duration_minutes,
+                lockout_observation_window_minutes,
+                applies_to,
+                is_weaker_than_domain,
+                weaknesses,
+            });
+        }
+
+        Self::unbind_with_timeout(ldap).await;
+        Ok(policies)
+    }
+
+    /// Run comprehensive infrastructure security audit
+    pub async fn audit_infrastructure_security(&self) -> Result<crate::infrastructure_audit::InfrastructureAudit> {
+        use crate::infrastructure_audit::*;
+
+        info!("audit_infrastructure_security: Starting infrastructure security audit...");
+
+        let mut findings = Vec::new();
+
+        // 1. Check LDAP Security
+        info!("Checking LDAP security settings...");
+        let ldap_security = match self.check_ldap_security().await {
+            Ok(status) => status,
+            Err(e) => {
+                warn!("LDAP security check failed: {}. Using defaults.", e);
+                LdapSecurityStatus::default()
+            }
+        };
+
+        if ldap_security.anonymous_bind_allowed {
+            findings.push(InfrastructureFinding::new(
+                "LDAP Security",
+                "Anonymous LDAP Bind Allowed",
+                InfrastructureSeverity::High,
+                "Domain Controllers",
+                "Anonymous LDAP bind is allowed, enabling unauthenticated enumeration of Active Directory objects.",
+                "Attackers can enumerate users, groups, computers, and other AD objects without authentication. This aids reconnaissance for further attacks.",
+                "Disable anonymous LDAP access by setting the 7th character of dsHeuristics to '0'. Review LDAP permissions for the Anonymous Logon identity.",
+                serde_json::json!({
+                    "ds_heuristics": ldap_security.ds_heuristics,
+                    "anonymous_access_setting": ldap_security.anonymous_access_setting
+                }),
+            ));
+        }
+
+        // 2. Check Print Spooler exposure
+        info!("Checking Print Spooler exposure on DCs...");
+        let print_spooler_exposure = match self.check_print_spooler_exposure().await {
+            Ok(exposures) => exposures,
+            Err(e) => {
+                warn!("Print Spooler exposure check failed: {}. Using defaults.", e);
+                Vec::new()
+            }
+        };
+
+        for dc in &print_spooler_exposure {
+            if dc.spooler_spn_present {
+                findings.push(InfrastructureFinding::new(
+                    "Service Security",
+                    "Print Spooler Potentially Running on Domain Controller",
+                    InfrastructureSeverity::High,
+                    &dc.dc_name,
+                    &format!("Domain Controller '{}' has Print Spooler-related SPNs, indicating the Print Spooler service may be running.", dc.dc_name),
+                    "PrintNightmare (CVE-2021-34527) allows remote code execution. SpoolSample attack can coerce DC authentication for credential theft.",
+                    "Disable Print Spooler on all Domain Controllers: Stop-Service -Name Spooler -Force; Set-Service -Name Spooler -StartupType Disabled",
+                    serde_json::json!({
+                        "dc_name": dc.dc_name,
+                        "dns_hostname": dc.dns_hostname,
+                        "operating_system": dc.operating_system,
+                        "spooler_spns": dc.spooler_spns
+                    }),
+                ));
+            }
+        }
+
+        // 3. Check Authentication Silos
+        info!("Checking Authentication Silos configuration...");
+        let auth_silos = match self.check_authentication_silos().await {
+            Ok(silos) => silos,
+            Err(e) => {
+                warn!("Authentication Silos check failed: {}. Using defaults.", e);
+                AuthSiloStatus::default()
+            }
+        };
+
+        if !auth_silos.silos_in_use {
+            findings.push(InfrastructureFinding::new(
+                "Privileged Access",
+                "Authentication Silos Not Configured",
+                InfrastructureSeverity::High,
+                "Domain",
+                "No Authentication Silos are configured or in use for Tier 0 account protection.",
+                "Tier 0 credentials can be used from any system, increasing risk of credential theft via pass-the-hash, pass-the-ticket, or memory extraction attacks.",
+                "Implement Authentication Silos to restrict where Tier 0 accounts can authenticate. Create Privileged Access Workstations (PAWs) for administrative tasks.",
+                serde_json::json!({
+                    "silos_configured": auth_silos.silos_configured,
+                    "tier0_unprotected_count": auth_silos.tier0_accounts_not_in_silo.len()
+                }),
+            ));
+        }
+
+        for account in &auth_silos.tier0_accounts_not_in_silo {
+            if account.is_domain_admin || account.is_enterprise_admin {
+                findings.push(InfrastructureFinding::new(
+                    "Privileged Access",
+                    "Tier 0 Account Not Protected by Silo",
+                    InfrastructureSeverity::Medium,
+                    &account.sam_account_name,
+                    &format!("Tier 0 account '{}' is not assigned to an Authentication Silo.", account.sam_account_name),
+                    "This account's credentials can be used from any system, making it vulnerable to credential theft attacks.",
+                    &format!("Assign account to an Authentication Silo: Set-ADAccountAuthenticationPolicySilo -Identity '{}' -AuthenticationPolicySilo 'Tier0Silo'", account.sam_account_name),
+                    serde_json::json!({
+                        "account": account.sam_account_name,
+                        "is_domain_admin": account.is_domain_admin,
+                        "is_enterprise_admin": account.is_enterprise_admin,
+                        "is_schema_admin": account.is_schema_admin
+                    }),
+                ));
+            }
+        }
+
+        // 4. Check Pre-Windows 2000 Compatible Access
+        info!("Checking Pre-Windows 2000 Compatible Access group...");
+        let pre_2000_access = match self.check_pre_2000_compatible_access().await {
+            Ok(status) => status,
+            Err(e) => {
+                warn!("Pre-Windows 2000 Compatible Access check failed: {}. Using defaults.", e);
+                PreWindows2000Status::default()
+            }
+        };
+
+        if pre_2000_access.has_dangerous_members {
+            findings.push(InfrastructureFinding::new(
+                "Access Control",
+                "Pre-Windows 2000 Compatible Access Contains Dangerous Members",
+                InfrastructureSeverity::Critical,
+                "Pre-Windows 2000 Compatible Access",
+                "The Pre-Windows 2000 Compatible Access group contains 'Everyone' or 'Anonymous Logon', allowing anonymous enumeration of all AD objects.",
+                "Attackers can enumerate all users, groups, and other AD objects without any authentication, greatly aiding reconnaissance.",
+                "Remove 'Everyone' and 'Anonymous Logon' from the group. Only 'Authenticated Users' should remain if legacy compatibility is required.",
+                serde_json::json!({
+                    "anonymous_logon_member": pre_2000_access.anonymous_logon_member,
+                    "everyone_member": pre_2000_access.everyone_member,
+                    "member_count": pre_2000_access.members.len()
+                }),
+            ));
+        }
+
+        // 5. Check Fine-Grained Password Policies
+        info!("Enumerating Fine-Grained Password Policies...");
+        // Get actual domain password policy for comparison
+        let domain_policy = match self.get_domain_password_policy_for_comparison().await {
+            Ok(policy) => policy,
+            Err(e) => {
+                warn!("Failed to get domain password policy: {}. Using defaults for PSO comparison.", e);
+                crate::domain_security::PasswordPolicy::default()
+            }
+        };
+        let password_policies = match self.enumerate_fine_grained_password_policies(&domain_policy).await {
+            Ok(policies) => policies,
+            Err(e) => {
+                warn!("Fine-Grained Password Policy enumeration failed: {}. Using defaults.", e);
+                Vec::new()
+            }
+        };
+
+        for pso in &password_policies {
+            if pso.is_weaker_than_domain {
+                findings.push(InfrastructureFinding::new(
+                    "Password Policy",
+                    "Fine-Grained Password Policy Weaker Than Domain Policy",
+                    InfrastructureSeverity::Medium,
+                    &pso.name,
+                    &format!("Password Settings Object '{}' has settings weaker than the Default Domain Policy.", pso.name),
+                    &format!("Users/groups affected by this PSO may have weaker passwords. Weaknesses: {}", pso.weaknesses.join(", ")),
+                    "Review and update the PSO to meet or exceed domain policy requirements, or document business justification for exceptions.",
+                    serde_json::json!({
+                        "pso_name": pso.name,
+                        "precedence": pso.precedence,
+                        "weaknesses": pso.weaknesses,
+                        "applies_to_count": pso.applies_to.len()
+                    }),
+                ));
+            }
+        }
+
+        info!("audit_infrastructure_security: Completed with {} findings", findings.len());
+
+        // Use constructor to ensure counts are calculated correctly from findings
+        Ok(InfrastructureAudit::new(
+            ldap_security,
+            print_spooler_exposure,
+            auth_silos,
+            pre_2000_access,
+            password_policies,
+            findings,
+        ))
+    }
+
+    /// Get domain password policy for PSO comparison
+    async fn get_domain_password_policy_for_comparison(&self) -> Result<crate::domain_security::PasswordPolicy> {
+        let ldap = self.get_connection().await?;
+
+        let pwd_policy_filter = "(objectClass=domain)";
+        let (pwd_rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Base,
+            pwd_policy_filter,
+            vec![
+                "minPwdLength",
+                "pwdHistoryLength",
+                "maxPwdAge",
+                "minPwdAge",
+                "pwdProperties",
+                "lockoutThreshold",
+                "lockoutDuration",
+                "lockOutObservationWindow",
+            ],
+        ).await?;
+
+        let policy = pwd_rs
+            .into_iter()
+            .next()
+            .map(|e| {
+                let entry = SearchEntry::construct(e);
+                self.parse_password_policy(&entry)
+            })
+            .unwrap_or_default();
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok(policy)
     }
 }

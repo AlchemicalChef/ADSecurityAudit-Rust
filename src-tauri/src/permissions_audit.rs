@@ -56,6 +56,12 @@
 
 use serde::{Deserialize, Serialize};
 
+// Use shared Recommendation from common_types
+use crate::common_types::Recommendation;
+
+/// Type alias for backward compatibility - use Recommendation from common_types
+pub type PermissionRecommendation = Recommendation;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DangerousRight {
     GenericAll,
@@ -159,14 +165,6 @@ pub struct PermissionsAudit {
     pub risk_score: u32,
     pub scan_timestamp: String,
     pub recommendations: Vec<PermissionRecommendation>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PermissionRecommendation {
-    pub priority: u8,
-    pub title: String,
-    pub description: String,
-    pub steps: Vec<String>,
 }
 
 // Well-known GUIDs
@@ -373,11 +371,11 @@ impl PermissionsAudit {
         let mut recommendations = Vec::new();
 
         if self.enterprise_key_admins.has_excessive_rights {
-            recommendations.push(PermissionRecommendation {
-                priority: 1,
-                title: "Fix Enterprise Key Admins Over-Privileged ACE".to_string(),
-                description: "Enterprise Key Admins has excessive permissions that could enable DCSync attacks.".to_string(),
-                steps: vec![
+            recommendations.push(Recommendation::new(
+                1,
+                "Fix Enterprise Key Admins Over-Privileged ACE",
+                "Enterprise Key Admins has excessive permissions that could enable DCSync attacks.",
+                vec![
                     "Open ADSIEdit and connect to the Default naming context".to_string(),
                     format!("Navigate to the domain root and open Properties > Security"),
                     "Find the ACE for Enterprise Key Admins".to_string(),
@@ -388,18 +386,18 @@ impl PermissionsAudit {
                     ),
                     "Verify the change and test key credential operations".to_string(),
                 ],
-            });
+            ));
         }
 
         if self.total_dangerous_permissions > 0 {
-            recommendations.push(PermissionRecommendation {
-                priority: 2,
-                title: "Remove Dangerous Permissions on Critical OUs".to_string(),
-                description: format!(
+            recommendations.push(Recommendation::new(
+                2,
+                "Remove Dangerous Permissions on Critical OUs",
+                &format!(
                     "Found {} dangerous permission(s) on critical OUs that could allow privilege escalation.",
                     self.total_dangerous_permissions
                 ),
-                steps: vec![
+                vec![
                     "Open Active Directory Users and Computers".to_string(),
                     "Enable Advanced Features (View > Advanced Features)".to_string(),
                     "For each affected OU, right-click and select Properties > Security > Advanced".to_string(),
@@ -407,22 +405,22 @@ impl PermissionsAudit {
                     "Document all changes for audit purposes".to_string(),
                     "Monitor Event ID 5136 for future permission changes".to_string(),
                 ],
-            });
+            ));
         }
 
         // General recommendations
-        recommendations.push(PermissionRecommendation {
-            priority: 3,
-            title: "Implement AD Permission Monitoring".to_string(),
-            description: "Set up monitoring for permission changes on sensitive AD objects.".to_string(),
-            steps: vec![
+        recommendations.push(Recommendation::new(
+            3,
+            "Implement AD Permission Monitoring",
+            "Set up monitoring for permission changes on sensitive AD objects.",
+            vec![
                 "Enable Directory Service Changes auditing in Group Policy".to_string(),
                 "Configure advanced audit policy: DS Access > Audit Directory Service Changes".to_string(),
                 "Monitor Event IDs: 5136 (object modified), 5137 (object created), 5141 (object deleted)".to_string(),
                 "Set up alerts for permission changes on Domain Controllers OU, AdminSDHolder, and domain root".to_string(),
                 "Consider using tools like BloodHound to regularly audit AD permissions".to_string(),
             ],
-        });
+        ));
 
         self.recommendations = recommendations;
     }

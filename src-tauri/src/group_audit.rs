@@ -57,6 +57,12 @@
 
 use serde::{Deserialize, Serialize};
 
+// Use shared Recommendation from common_types
+use crate::common_types::Recommendation;
+
+/// Type alias for backward compatibility - use Recommendation from common_types
+pub type GroupRecommendation = Recommendation;
+
 // ==========================================
 // Group Audit Types
 // ==========================================
@@ -105,14 +111,6 @@ pub struct GroupFindingDetails {
     pub nested_groups: Option<Vec<String>>,
     pub user_dn: Option<String>,
     pub last_logon: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroupRecommendation {
-    pub priority: u8,
-    pub title: String,
-    pub description: String,
-    pub steps: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,75 +398,75 @@ impl GroupAudit {
 
     pub fn generate_recommendations(&mut self) {
         if self.excessive_membership_count > 0 {
-            self.recommendations.push(GroupRecommendation {
-                priority: 1,
-                title: "Reduce Privileged Group Membership".to_string(),
-                description: format!(
+            self.recommendations.push(Recommendation::new(
+                1,
+                "Reduce Privileged Group Membership",
+                &format!(
                     "Found {} group(s) with excessive membership. Large privileged groups increase attack surface.",
                     self.excessive_membership_count
                 ),
-                steps: vec![
+                vec![
                     "Audit each privileged group: Get-ADGroupMember -Identity 'Domain Admins' | Select-Object Name, SamAccountName".to_string(),
                     "Identify accounts that don't require permanent privileged access".to_string(),
                     "Implement Just-In-Time (JIT) administration using PAM or similar solutions".to_string(),
                     "Create role-based groups with delegated permissions instead of Domain Admin".to_string(),
                     "Document legitimate members and their business justification".to_string(),
                 ],
-            });
+            ));
         }
 
         if self.nested_groups_count > 0 {
-            self.recommendations.push(GroupRecommendation {
-                priority: 2,
-                title: "Remove Nested Groups from Critical Groups".to_string(),
-                description: format!(
+            self.recommendations.push(Recommendation::new(
+                2,
+                "Remove Nested Groups from Critical Groups",
+                &format!(
                     "Found {} nested group(s) in critical privileged groups. Nested groups obscure true membership.",
                     self.nested_groups_count
                 ),
-                steps: vec![
+                vec![
                     "List nested groups: Get-ADGroupMember -Identity 'Domain Admins' | Where-Object {$_.objectClass -eq 'group'}".to_string(),
                     "Enumerate actual users in nested groups recursively".to_string(),
                     "Remove nested groups and add required users directly".to_string(),
                     "Consider creating delegated administration groups instead".to_string(),
                     "Document the change and update access control procedures".to_string(),
                 ],
-            });
+            ));
         }
 
         if self.disabled_users_count > 0 {
-            self.recommendations.push(GroupRecommendation {
-                priority: 3,
-                title: "Remove Disabled Users from Privileged Groups".to_string(),
-                description: format!(
+            self.recommendations.push(Recommendation::new(
+                3,
+                "Remove Disabled Users from Privileged Groups",
+                &format!(
                     "Found {} disabled user(s) still in privileged groups. These should be removed immediately.",
                     self.disabled_users_count
                 ),
-                steps: vec![
+                vec![
                     "Find disabled users in privileged groups:".to_string(),
                     "Get-ADGroupMember -Identity 'Domain Admins' | Get-ADUser | Where-Object {$_.Enabled -eq $false}".to_string(),
                     "Remove each disabled user from all privileged groups".to_string(),
                     "Implement automated offboarding process to prevent recurrence".to_string(),
                     "Consider using PAM solutions that auto-remove access on account disable".to_string(),
                 ],
-            });
+            ));
         }
 
         if self.inactive_users_count > 0 {
-            self.recommendations.push(GroupRecommendation {
-                priority: 4,
-                title: "Review Inactive Privileged Users".to_string(),
-                description: format!(
+            self.recommendations.push(Recommendation::new(
+                4,
+                "Review Inactive Privileged Users",
+                &format!(
                     "Found {} user(s) in privileged groups who haven't logged in for over {} days.",
                     self.inactive_users_count, INACTIVE_DAYS_THRESHOLD
                 ),
-                steps: vec![
+                vec![
                     format!("Find inactive privileged users (>{} days):", INACTIVE_DAYS_THRESHOLD),
                     "$threshold = (Get-Date).AddDays(-90); Get-ADGroupMember -Identity 'Domain Admins' | Get-ADUser -Properties LastLogonDate | Where-Object {$_.LastLogonDate -lt $threshold}".to_string(),
                     "Verify if users still require privileged access".to_string(),
                     "Remove access for users who no longer need it".to_string(),
                     "Implement regular access reviews (quarterly recommended)".to_string(),
                 ],
-            });
+            ));
         }
     }
 }

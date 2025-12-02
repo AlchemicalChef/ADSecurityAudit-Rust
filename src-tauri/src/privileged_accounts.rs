@@ -108,6 +108,12 @@ pub struct PrivilegedAccount {
     pub risk_factors: Vec<RiskFactor>,
     pub is_sensitive: bool, // "Account is sensitive and cannot be delegated"
     pub is_protected: bool, // Member of protected group (AdminSDHolder)
+    /// Account has DONT_REQUIRE_PREAUTH flag (vulnerable to AS-REP Roasting)
+    pub is_asrep_roastable: bool,
+    /// Account is member of Protected Users group (enhanced Kerberos security)
+    pub in_protected_users: bool,
+    /// Raw userAccountControl value for additional flag checks
+    pub user_account_control: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -159,6 +165,10 @@ pub enum RiskFactorType {
     NotProtected,
     PasswordNotRequired,
     DisabledWithPrivileges,
+    /// Account has DONT_REQUIRE_PREAUTH flag - vulnerable to AS-REP Roasting
+    AsRepRoastable,
+    /// Tier 0 account not in Protected Users group - missing Kerberos hardening
+    NotInProtectedUsers,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -199,6 +209,10 @@ pub struct PrivilegedAccountSummary {
     pub accounts_with_stale_passwords: usize,
     pub accounts_password_never_expires: usize,
     pub kerberoastable_accounts: usize,
+    /// Accounts vulnerable to AS-REP Roasting (DONT_REQUIRE_PREAUTH flag)
+    pub asrep_roastable_accounts: usize,
+    /// Tier 0 accounts not in Protected Users group
+    pub tier0_not_in_protected_users: usize,
     
     // Group statistics
     pub privileged_groups: Vec<PrivilegedGroup>,
@@ -311,20 +325,45 @@ pub fn calculate_risk_factors(account: &PrivilegedAccount) -> Vec<RiskFactor> {
             score_impact: 20,
         });
     }
-    
+
+    // AS-REP Roasting vulnerability (DONT_REQUIRE_PREAUTH flag)
+    // UAC flag 0x400000 (4194304) - allows attackers to request AS-REP without authentication
+    if account.is_asrep_roastable {
+        factors.push(RiskFactor {
+            factor_type: RiskFactorType::AsRepRoastable,
+            description: "Account does not require Kerberos pre-authentication (AS-REP Roastable)".to_string(),
+            severity: RiskSeverity::Critical,
+            score_impact: 45,
+        });
+    }
+
+    // Tier 0 accounts should be in Protected Users group for enhanced Kerberos security
+    if matches!(account.highest_privilege_level, PrivilegeLevel::Tier0) && !account.in_protected_users {
+        factors.push(RiskFactor {
+            factor_type: RiskFactorType::NotInProtectedUsers,
+            description: "Tier 0 account is not a member of Protected Users group".to_string(),
+            severity: RiskSeverity::High,
+            score_impact: 25,
+        });
+    }
+
     factors
 }
 
 /// Calculate overall risk score for summary
 pub fn calculate_overall_risk(summary: &PrivilegedAccountSummary) -> (u32, RiskSeverity) {
     let mut score = 0u32;
-    
+
     // Base score from account counts
     score += summary.total_tier0_accounts as u32 * 10;
     score += summary.total_tier1_accounts as u32 * 5;
     score += summary.high_risk_accounts as u32 * 15;
     score += summary.accounts_password_never_expires as u32 * 8;
     score += summary.kerberoastable_accounts as u32 * 12;
+    // AS-REP Roasting is critical - high impact
+    score += summary.asrep_roastable_accounts as u32 * 20;
+    // Tier 0 accounts not in Protected Users - moderate impact
+    score += summary.tier0_not_in_protected_users as u32 * 10;
     
     // Normalize to 0-100 with safe division
     const MAX_SCORE: u32 = 500;
@@ -432,7 +471,52 @@ pub fn generate_privileged_account_recommendations(
             ],
         });
     }
-    
+
+    // AS-REP Roastable accounts (DONT_REQUIRE_PREAUTH)
+    if summary.asrep_roastable_accounts > 0 {
+        recommendations.push(PrivilegedAccountRecommendation {
+            priority: RiskSeverity::Critical,
+            category: "Kerberos Security".to_string(),
+            title: "Remove DONT_REQUIRE_PREAUTH Flag (AS-REP Roasting Risk)".to_string(),
+            description: format!(
+                "{} accounts do not require Kerberos pre-authentication. Attackers can request encrypted \
+                 AS-REP data for these accounts without any authentication and crack passwords offline.",
+                summary.asrep_roastable_accounts
+            ),
+            affected_count: summary.asrep_roastable_accounts,
+            remediation_steps: vec![
+                "Enable Kerberos pre-authentication: Set-ADUser -Identity <user> -DoesNotRequirePreAuth $false".to_string(),
+                "Audit why pre-authentication was disabled - this is rarely needed".to_string(),
+                "Use strong, complex passwords (25+ characters) for accounts that must have this flag".to_string(),
+                "Monitor Event ID 4768 with Pre-Authentication Type 0 for AS-REP Roasting attempts".to_string(),
+                "Consider adding affected accounts to Protected Users group".to_string(),
+            ],
+        });
+    }
+
+    // Tier 0 accounts not in Protected Users group
+    if summary.tier0_not_in_protected_users > 0 {
+        recommendations.push(PrivilegedAccountRecommendation {
+            priority: RiskSeverity::High,
+            category: "Kerberos Security".to_string(),
+            title: "Add Tier 0 Accounts to Protected Users Group".to_string(),
+            description: format!(
+                "{} Tier 0 accounts are not members of the Protected Users group. \
+                 Protected Users provides enhanced Kerberos security including: no NTLM authentication, \
+                 no delegation, shorter TGT lifetime, and AES-only encryption.",
+                summary.tier0_not_in_protected_users
+            ),
+            affected_count: summary.tier0_not_in_protected_users,
+            remediation_steps: vec![
+                "Add Domain Admin and Enterprise Admin accounts to Protected Users: Add-ADGroupMember -Identity 'Protected Users' -Members <user>".to_string(),
+                "Test application compatibility before adding service accounts".to_string(),
+                "Note: Protected Users cannot use NTLM - ensure Kerberos is available for all admin tasks".to_string(),
+                "Protected Users cannot be delegated - verify no delegation requirements exist".to_string(),
+                "Consider implementing Privileged Access Workstations (PAWs) for Protected Users".to_string(),
+            ],
+        });
+    }
+
     // Service accounts with admin rights
     let admin_service_accounts = accounts.iter()
         .filter(|a| {
