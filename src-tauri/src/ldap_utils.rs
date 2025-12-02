@@ -1,7 +1,10 @@
-/// LDAP Utilities
-///
-/// This module provides RFC 4515 and RFC 4514 compliant escaping functions
-/// to prevent LDAP injection attacks.
+// Allow unused code - security utilities for future use
+#![allow(dead_code)]
+
+//! LDAP Utilities
+//!
+//! This module provides RFC 4515 and RFC 4514 compliant escaping functions
+//! to prevent LDAP injection attacks.
 
 /// Escapes a string for safe use in an LDAP search filter (RFC 4515).
 ///

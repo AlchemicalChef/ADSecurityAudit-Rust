@@ -5,9 +5,11 @@
 //! - Domain security posture
 //! - Privilege escalation paths
 //! - Configuration vulnerabilities
+//!
+// Allow unused code - risk visualization methods for future UI features
+#![allow(dead_code)]
 
-use anyhow::Result;
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -530,14 +532,12 @@ impl RiskScoringEngine {
         });
 
         // Calculate overall score (weighted average)
-        let overall_score = (
-            krbtgt_score * 0.25 +
+        let overall_score = krbtgt_score * 0.25 +
             admin_score * 0.20 +
             password_score * 0.15 +
             gpo_score * 0.15 +
             delegation_score * 0.15 +
-            trust_score * 0.10
-        );
+            trust_score * 0.10;
 
         let risk_level = RiskLevel::from_score(overall_score);
 

@@ -1,5 +1,8 @@
 //! LDAP Connection Pool with automatic health checking and reconnection
 //! Provides high-performance connection management for large AD environments
+//!
+// Allow unused code - connection pooling features for future optimization
+#![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
 use ldap3::{LdapConnAsync, LdapConnSettings, Ldap};

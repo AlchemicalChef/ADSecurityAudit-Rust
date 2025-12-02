@@ -3,6 +3,9 @@
 //! The KRBTGT account is the most critical service account in Active Directory.
 //! It is used to encrypt and sign all Kerberos tickets (TGTs) in the domain.
 //!
+// Allow unused code - rotation wait constants for future validation
+#![allow(dead_code)]
+//!
 //! # Why KRBTGT Security Matters
 //!
 //! If the KRBTGT password hash is compromised, attackers can create **Golden Tickets** -

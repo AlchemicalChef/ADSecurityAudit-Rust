@@ -1,7 +1,10 @@
-/// Error handling module
-///
-/// This module provides structured error types for the IRP application,
-/// replacing silent failures and ensuring proper error propagation.
+// Allow unused code - error types for future error handling migration
+#![allow(dead_code)]
+
+//! Error handling module
+//!
+//! This module provides structured error types for the IRP application,
+//! replacing silent failures and ensuring proper error propagation.
 
 use thiserror::Error;
 

@@ -1,3 +1,6 @@
+// Allow unused code - client methods for future expansion
+#![allow(dead_code)]
+
 use anyhow::{anyhow, Result};
 use ldap3::{LdapConn, Scope, SearchEntry};
 use serde::{Deserialize, Serialize};
@@ -514,7 +517,7 @@ impl ActiveDirectoryClient {
         );
 
         // Search for AdminSDHolder with security descriptor using timeout
-        let (rs, mut ldap) = self.search_with_timeout(
+        let (rs, ldap) = self.search_with_timeout(
             ldap,
             &adminsdholder_dn,
             Scope::Base,
@@ -768,7 +771,7 @@ impl ActiveDirectoryClient {
         info!("get_krbtgt_account: Searching in {} with filter {}", users_dn, filter);
 
         // Use search with timeout to prevent hanging
-        let (rs, mut ldap) = crate::ldap_timeout::ldap_search_with_timeout(
+        let (rs, ldap) = crate::ldap_timeout::ldap_search_with_timeout(
             ldap,
             &users_dn,
             Scope::OneLevel,
@@ -3945,7 +3948,7 @@ impl ActiveDirectoryClient {
     }
 
     fn check_esc2(&self, entry: &ldap3::SearchEntry, template_name: &str, template_dn: &str, audit: &mut DAEquivalenceAudit) -> Result<()> {
-        use crate::da_equivalence::{ANY_PURPOSE_EKU, CLIENT_AUTHENTICATION_EKU, SMART_CARD_LOGON_EKU};
+        use crate::da_equivalence::ANY_PURPOSE_EKU;
         use crate::ldap_utils::parse_security_descriptor;
 
         // ESC2: Template allows Any Purpose EKU or no EKU (similar risk to ESC1)
@@ -4147,6 +4150,7 @@ impl ActiveDirectoryClient {
 
     async fn check_esc7(&self, config_dn: &str, audit: &mut DAEquivalenceAudit, ldap: LdapConn) -> Result<LdapConn> {
         use crate::ldap_utils::parse_security_descriptor;
+        #[allow(unused_imports)]
         use crate::da_equivalence::{MANAGE_CA_GUID, CERTIFICATE_ENROLLMENT_GUID};
 
         // Query Certification Authorities (CAs)

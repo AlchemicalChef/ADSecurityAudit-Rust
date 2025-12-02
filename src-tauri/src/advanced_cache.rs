@@ -6,8 +6,11 @@
 //! - Cache warming and predictive loading
 //! - Statistics tracking
 //! - Multi-domain support
+//!
+// Allow unused code - cache warming/eviction features for future optimization
+#![allow(dead_code)]
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use chrono::{DateTime, Utc, Duration};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};

@@ -3,6 +3,9 @@
 //! Comprehensive analysis of privileged accounts in Active Directory environments,
 //! implementing Microsoft's tiered administration model and security best practices.
 //!
+// Allow unused code - delegation analysis types for future features
+#![allow(dead_code)]
+//!
 //! # Microsoft Tier Model
 //!
 //! This module implements the recommended three-tier administrative model:

@@ -1,8 +1,11 @@
-/// Secure Types Module
-///
-/// This module provides secure credential storage types that automatically
-/// zero out sensitive data from memory when dropped, preventing credential
-/// exposure through memory dumps or debugging tools.
+// Allow unused code - standard type methods for completeness
+#![allow(dead_code)]
+
+//! Secure Types Module
+//!
+//! This module provides secure credential storage types that automatically
+//! zero out sensitive data from memory when dropped, preventing credential
+//! exposure through memory dumps or debugging tools.
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use std::fmt;

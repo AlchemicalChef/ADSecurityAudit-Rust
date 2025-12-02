@@ -48,7 +48,7 @@ use da_equivalence::DAEquivalenceAudit;
 use connection_pool::{LdapConnectionPool, PoolConfig, PoolStats};
 use query_cache::{CacheManager, CacheKey};
 use parallel_executor::{ParallelExecutor, ParallelConfig, ExecutionStats};
-use database::{Database, DomainConfig};
+use database::Database;
 use forest_manager::{ForestManager, DomainInfo};
 use advanced_cache::AdvancedCache;
 use audit_log::{AuditLogger, AuditEntry, AuditFilter, ComplianceStandard, AuditStatistics, ComplianceReport, Severity as AuditSeverity, Category as AuditCategory};
@@ -267,7 +267,6 @@ async fn connect_ad(
 ) -> Result<String, String> {
     info!("=== CONNECTION ATTEMPT ===");
     info!("Server: {}", server);
-    info!("Username: {}", username);
     info!("Base DN: {}", base_dn);
     info!("Using LDAPS: {}", server.contains(":636") || server.contains("ldaps://"));
 
@@ -1737,7 +1736,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .setup(move |app| {
+        .setup(move |_app| {
             // Initialize ForestManager asynchronously in the Tauri runtime
             let fm_clone = forest_manager.clone();
             tauri::async_runtime::spawn(async move {

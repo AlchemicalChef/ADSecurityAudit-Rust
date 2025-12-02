@@ -3,6 +3,9 @@
 //! Detects dangerous Access Control Entries (ACEs) that could enable
 //! privilege escalation, persistence, and domain compromise attacks.
 //!
+// Allow unused code - permission GUID constants for security analysis
+#![allow(dead_code)]
+//!
 //! # Critical Checks Performed
 //!
 //! ## Enterprise Key Admins Misconfiguration

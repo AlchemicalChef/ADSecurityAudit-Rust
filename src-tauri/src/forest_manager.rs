@@ -2,12 +2,15 @@
 //!
 //! Manages multiple domain connections, coordinates forest-wide audits,
 //! and provides seamless domain switching capabilities.
+//!
+// Allow unused code - multi-domain features for future expansion
+#![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 use serde::{Deserialize, Serialize};
 
 use crate::ad_client::ActiveDirectoryClient;

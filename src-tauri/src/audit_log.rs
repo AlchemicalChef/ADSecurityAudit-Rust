@@ -6,6 +6,9 @@
 //! - Compliance reporting (SOC2, HIPAA, PCI-DSS)
 //! - Real-time alerting
 //! - Log export capabilities
+//!
+// Allow unused code - export/verify methods for compliance features
+#![allow(dead_code)]
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
@@ -13,7 +16,7 @@ use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tracing::{info, error, warn};
+use tracing::{info, error};
 
 /// Audit event severity levels for categorizing security events
 ///

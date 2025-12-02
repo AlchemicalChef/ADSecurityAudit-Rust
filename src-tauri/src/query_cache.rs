@@ -1,5 +1,8 @@
 //! Query result caching with TTL for improved performance
 //! Reduces load on Active Directory by caching frequently accessed data
+//!
+// Allow unused code - cache methods for future optimization
+#![allow(dead_code)]
 
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};

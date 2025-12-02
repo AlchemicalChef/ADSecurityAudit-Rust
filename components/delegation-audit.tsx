@@ -48,6 +48,9 @@ import {
   Copy,
 } from "lucide-react"
 import { auditDelegation, type DelegationAudit } from "@/lib/tauri-api"
+import { useToggleSet } from "@/hooks/use-toggle-set"
+import { useClipboard } from "@/hooks/use-clipboard"
+import { getSeverityColor, getRiskLevel } from "@/lib/severity-utils"
 
 interface DelegationAuditViewProps {
   isConnected: boolean
@@ -57,8 +60,8 @@ export function DelegationAuditView({ isConnected }: DelegationAuditViewProps) {
   const [audit, setAudit] = useState<DelegationAudit | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [expandedFindings, setExpandedFindings] = useState<Set<number>>(new Set())
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const { toggle: toggleFinding, has: isExpanded } = useToggleSet<number>()
+  const { copyToClipboard, isCopied } = useClipboard<number>()
 
   const runAudit = async () => {
     setLoading(true)
@@ -78,37 +81,6 @@ export function DelegationAuditView({ isConnected }: DelegationAuditViewProps) {
       runAudit()
     }
   }, [isConnected])
-
-  const toggleFinding = (index: number) => {
-    const newExpanded = new Set(expandedFindings)
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index)
-    } else {
-      newExpanded.add(index)
-    }
-    setExpandedFindings(newExpanded)
-  }
-
-  const copyToClipboard = async (text: string, index: number) => {
-    await navigator.clipboard.writeText(text)
-    setCopiedIndex(index)
-    setTimeout(() => setCopiedIndex(null), 2000)
-  }
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case "critical":
-        return "bg-red-500/20 text-red-400 border-red-500/50"
-      case "high":
-        return "bg-orange-500/20 text-orange-400 border-orange-500/50"
-      case "medium":
-        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
-      case "low":
-        return "bg-blue-500/20 text-blue-400 border-blue-500/50"
-      default:
-        return "bg-muted text-muted-foreground border-border"
-    }
-  }
 
   const getDelegationTypeIcon = (type: string) => {
     switch (type) {
@@ -134,13 +106,6 @@ export function DelegationAuditView({ isConnected }: DelegationAuditViewProps) {
       default:
         return <Key className="h-4 w-4" />
     }
-  }
-
-  const getRiskLevel = (score: number): { label: string; color: string } => {
-    if (score >= 70) return { label: "Critical", color: "text-red-400" }
-    if (score >= 50) return { label: "High", color: "text-orange-400" }
-    if (score >= 30) return { label: "Medium", color: "text-yellow-400" }
-    return { label: "Low", color: "text-green-400" }
   }
 
   if (!isConnected) {
@@ -278,13 +243,13 @@ export function DelegationAuditView({ isConnected }: DelegationAuditViewProps) {
                 </Card>
               ) : (
                 audit.findings.map((finding, index) => (
-                  <Collapsible key={index} open={expandedFindings.has(index)} onOpenChange={() => toggleFinding(index)}>
+                  <Collapsible key={index} open={isExpanded(index)} onOpenChange={() => toggleFinding(index)}>
                     <Card className={`border ${getSeverityColor(finding.severity).split(" ")[2]}`}>
                       <CollapsibleTrigger asChild>
                         <CardHeader className="cursor-pointer hover:bg-accent/50">
                           <div className="flex items-start justify-between">
                             <div className="flex items-start gap-3">
-                              {expandedFindings.has(index) ? (
+                              {isExpanded(index) ? (
                                 <ChevronDown className="mt-1 h-4 w-4" />
                               ) : (
                                 <ChevronRight className="mt-1 h-4 w-4" />
@@ -413,7 +378,7 @@ export function DelegationAuditView({ isConnected }: DelegationAuditViewProps) {
                               className="h-5 w-5 p-0"
                               onClick={() => copyToClipboard(step.split(": ")[1] || step, i)}
                             >
-                              {copiedIndex === i ? (
+                              {isCopied(i) ? (
                                 <CheckCircle className="h-3 w-3 text-green-400" />
                               ) : (
                                 <Copy className="h-3 w-3" />

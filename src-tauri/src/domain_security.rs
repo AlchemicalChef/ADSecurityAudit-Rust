@@ -1,6 +1,9 @@
 //! Domain Security Audit Module
 //! Evaluates domain security settings including password policies, functional levels,
 //! legacy systems, Azure AD SSO, and AD Recycle Bin status.
+//!
+// Allow unused code - legacy OS patterns for future detection
+#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 

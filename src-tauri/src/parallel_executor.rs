@@ -1,5 +1,8 @@
 //! Parallel query execution for large-scale AD environments
 //! Provides efficient concurrent operations with progress tracking
+//!
+// Allow unused code - parallel execution features for future optimization
+#![allow(dead_code)]
 
 use anyhow::Result;
 use futures::future::join_all;

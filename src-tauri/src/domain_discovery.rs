@@ -1,3 +1,6 @@
+// Allow unused code - discovery utilities for future expansion
+#![allow(dead_code)]
+
 //! Domain Discovery Module
 //!
 //! Uses Windows native APIs to automatically discover:
@@ -77,6 +80,7 @@ mod windows_impl {
                 return Err(format!("NetGetJoinInformation failed with error: {}", status));
             }
 
+            #[allow(non_upper_case_globals)]
             let result = match buffer_type {
                 NetSetupDomainName => {
                     let domain = pwstr_to_string(name_buffer.0);
@@ -201,7 +205,7 @@ mod windows_impl {
                 dc_address: pwstr_to_string(info.DomainControllerAddress.0),
                 domain_name: pwstr_to_string(info.DomainName.0),
                 dns_forest_name: pwstr_to_string(info.DnsForestName.0),
-                dc_site_name: pwstr_to_string(info.DcSiteName.0),
+                _dc_site_name: pwstr_to_string(info.DcSiteName.0),
                 client_site_name: pwstr_to_string(info.ClientSiteName.0),
             };
 
@@ -239,7 +243,7 @@ mod windows_impl {
         pub dc_address: Option<String>,
         pub domain_name: Option<String>,
         pub dns_forest_name: Option<String>,
-        pub dc_site_name: Option<String>,
+        pub _dc_site_name: Option<String>,
         pub client_site_name: Option<String>,
     }
 }

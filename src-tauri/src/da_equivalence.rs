@@ -4,6 +4,9 @@
 //! equivalent privileges through indirect attack paths, misconfigurations, or
 //! overlooked permissions.
 //!
+// Allow unused code - these are security reference constants for future features
+#![allow(dead_code)]
+//!
 //! # What is Domain Admin Equivalence?
 //!
 //! A principal has "Domain Admin Equivalence" if they can gain Domain Admin

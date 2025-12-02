@@ -5,8 +5,10 @@
 //! - Abnormal access patterns
 //! - Suspicious group membership changes
 //! - Anomalous authentication behavior
+//!
+// Allow unused code - advanced detection methods for future features
+#![allow(dead_code)]
 
-use anyhow::Result;
 use chrono::{DateTime, Utc, Duration, Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

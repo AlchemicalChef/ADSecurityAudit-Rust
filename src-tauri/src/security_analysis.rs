@@ -1,3 +1,6 @@
+// Allow unused code - analysis utilities for future expansion
+#![allow(dead_code)]
+
 //! Security Analysis Module for AdminSDHolder and ACL Auditing
 //!
 //! Provides comprehensive analysis of Windows Security Descriptors and Access Control Lists
