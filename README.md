@@ -1,147 +1,356 @@
-# ADSecurityScanner
+# ADSecurityAudit
 
-A comprehensive Active Directory security scanner built with Tauri (Rust backend) and React (frontend), featuring deep AD integration for enterprise security auditing and operations.
+A comprehensive Active Directory security auditing platform built with Rust and React. Performs deep security analysis across privilege escalation paths, Kerberos delegation, ADCS vulnerabilities, and infrastructure misconfigurations.
 
-## Features
+## Key Features
 
-### 🛡️ Core Capabilities
-- **Incident Management**: Create, track, and resolve security incidents with priority levels
-- **Active Directory Integration**: Seamlessly connect to AD for user management operations
-- **User Account Management**: Search and disable user accounts during incident response
-- **Real-time Dashboard**: Monitor incidents, system health, and response metrics
-- **Audit Logging**: All actions are logged for compliance and forensics
+### Authentication
+- **GSSAPI/Kerberos** - Windows integrated authentication using SSPI
+- **Simple Bind** - Username/password with LDAPS support
+- **Auto Mode** - Automatically selects best available method
+- **Secure Credential Handling** - Zeroized memory, no plaintext storage
 
-### 🔐 Security Features
-- Secure LDAP/AD communication
-- Role-based access control ready
-- Encrypted credential handling
-- Comprehensive audit trail
-- Incident response workflow automation
+### Security Audits
 
-### 💻 Technical Stack
-- **Backend**: Rust with Tauri 2.0
-- **Frontend**: React 19 + Next.js 15
-- **AD Integration**: LDAP3 protocol library
-- **UI**: Tailwind CSS with dark theme optimized for SOC environments
+| Audit Module | Coverage |
+|--------------|----------|
+| **DA Equivalence** | DCSync rights, Shadow Credentials, SID History, Ghost Accounts |
+| **ADCS (ESC1-8)** | Certificate template abuse, enrollment agent, CA management |
+| **Kerberos Delegation** | Unconstrained, Constrained, RBCD, Protocol Transition |
+| **Privileged Accounts** | Tier 0/1/2 classification, AS-REP Roasting, Kerberoasting |
+| **Domain Trusts** | SID filtering, selective auth, trust direction analysis |
+| **GPO Security** | Dangerous permissions, unlinked GPOs, SYSVOL access |
+| **Permissions** | AdminSDHolder, ACL analysis, dangerous delegations |
+| **Infrastructure** | LDAP signing, SMB signing, NTLM restrictions, DCShadow |
+
+### Attack Detection
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ATTACK DETECTION COVERAGE                     │
+├─────────────────────────────────────────────────────────────────┤
+│ Credential Theft        │ Privilege Escalation                  │
+│ ├─ DCSync Rights        │ ├─ WriteSPN (Kerberoasting)           │
+│ ├─ LAPS Password Exposure│ ├─ Shadow Credentials                │
+│ ├─ gMSA Credential Access│ ├─ RBCD Write Access                 │
+│ └─ AS-REP Roasting      │ └─ Group Membership Control           │
+│                         │                                       │
+│ Persistence             │ Lateral Movement                      │
+│ ├─ Ghost Accounts       │ ├─ Unconstrained Delegation           │
+│ ├─ SID History Abuse    │ ├─ Constrained to DCs                 │
+│ └─ DCShadow Indicators  │ └─ Computer Object Control            │
+│                         │                                       │
+│ ADCS Attacks            │ Infrastructure                        │
+│ ├─ ESC1: Enrollee Subject│ ├─ Weak Kerberos Encryption (RC4)   │
+│ ├─ ESC2: Any Purpose EKU│ ├─ Stale Computer Accounts           │
+│ ├─ ESC3: Enrollment Agent│ ├─ NTLM Relay Exposure              │
+│ ├─ ESC4: Template ACLs  │ ├─ LDAP Signing Not Required         │
+│ ├─ ESC7: CA Management  │ └─ SMB Signing Not Required          │
+│ └─ ESC8: Web Enrollment │                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Risk Scoring & Analysis
+
+- **Domain Risk Score** - Aggregate risk assessment (0-100)
+- **User Risk Scoring** - Individual account risk factors
+- **Anomaly Detection** - Behavioral baseline and deviation analysis
+- **Compliance Reporting** - SOX, HIPAA, PCI-DSS, NIST mappings
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                         FRONTEND (React)                          │
+│  Next.js 15 │ Tailwind CSS │ Recharts │ Dark Theme for SOC       │
+└──────────────────────────────────────────────────────────────────┘
+                                │
+                         Tauri IPC Bridge
+                                │
+┌──────────────────────────────────────────────────────────────────┐
+│                        BACKEND (Rust)                             │
+├──────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐               │
+│  │    Auth     │  │  Connection │  │   Forest    │               │
+│  │   Module    │  │    Pool     │  │   Manager   │               │
+│  │  (GSSAPI)   │  │  (Async)    │  │ (Multi-DC)  │               │
+│  └─────────────┘  └─────────────┘  └─────────────┘               │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                    AUDIT MODULES                             │ │
+│  │  da_equivalence │ delegation │ adcs │ gpo │ permissions     │ │
+│  │  privileged_accounts │ domain_trust │ group │ infrastructure│ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐               │
+│  │   Risk      │  │   Anomaly   │  │   Audit     │               │
+│  │  Scoring    │  │  Detection  │  │   Logger    │               │
+│  └─────────────┘  └─────────────┘  └─────────────┘               │
+└──────────────────────────────────────────────────────────────────┘
+                                │
+                    LDAP/LDAPS + GSSAPI/SSPI
+                                │
+┌──────────────────────────────────────────────────────────────────┐
+│                     ACTIVE DIRECTORY                              │
+│         Domain Controllers │ Global Catalog │ ADCS CAs           │
+└──────────────────────────────────────────────────────────────────┘
+```
 
 ## Installation
 
 ### Prerequisites
-- Rust 1.70+ (install from https://rustup.rs/)
-- Node.js 18+ and npm
-- Active Directory server access (for AD features)
 
-### Setup
+- **Rust 1.78+** - https://rustup.rs/
+- **Node.js 18+** - https://nodejs.org/
+- **Windows SDK** - For GSSAPI/SSPI support
+- **Domain-joined machine** - For Kerberos authentication (optional)
 
-1. **Clone and Install Dependencies**
-\`\`\`bash
+### Build
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/ADSecurityAudit-Rust.git
+cd ADSecurityAudit-Rust
+
+# Install frontend dependencies
 npm install
-\`\`\`
 
-2. **Development Mode**
-\`\`\`bash
+# Development mode
 npm run tauri:dev
-\`\`\`
 
-3. **Build for Production**
-\`\`\`bash
+# Production build
 npm run tauri:build
-\`\`\`
+```
 
-The built application will be in `src-tauri/target/release/`.
+The compiled binary will be in `src-tauri/target/release/`.
+
+## Authentication
+
+### GSSAPI/Kerberos (Recommended)
+
+Uses the current Windows user's Kerberos ticket. No password required.
+
+```rust
+// Connection pool with GSSAPI
+let pool = LdapConnectionPool::new_with_gssapi(
+    "dc01.contoso.com".to_string(),
+    "DC=contoso,DC=com".to_string(),
+    None,
+);
+```
+
+**Requirements:**
+- Domain-joined Windows machine
+- Valid Kerberos TGT (automatic from Windows logon)
+- Network access to domain controller
+
+### Simple Bind
+
+Traditional username/password authentication. Use LDAPS (port 636) in production.
+
+```rust
+let pool = LdapConnectionPool::new(
+    "dc01.contoso.com:636".to_string(),
+    "svc_audit@contoso.com".to_string(),
+    "password".to_string(),
+    "DC=contoso,DC=com".to_string(),
+    None,
+);
+```
+
+### Auto Mode
+
+Tries GSSAPI first, falls back to simple bind if credentials provided.
+
+```rust
+let pool = LdapConnectionPool::new_auto(
+    "dc01.contoso.com".to_string(),
+    Some("svc_audit@contoso.com".to_string()),
+    Some("password".to_string()),
+    "DC=contoso,DC=com".to_string(),
+    None,
+);
+```
+
+## Audit Modules
+
+### DA Equivalence Audit
+
+Finds accounts with Domain Admin equivalent privileges without being in DA group.
+
+| Finding | Severity | Attack |
+|---------|----------|--------|
+| DCSync Rights | Critical | Extract all password hashes |
+| Shadow Credentials | Critical | Passwordless authentication |
+| SID History | High | Privilege through SID injection |
+| Ghost Accounts | High | Stale privileged access |
+| LAPS Read Access | High | Local admin credential theft |
+
+### ADCS Vulnerabilities (ESC1-8)
+
+Detects Active Directory Certificate Services misconfigurations.
+
+| ESC | Vulnerability | Risk |
+|-----|--------------|------|
+| ESC1 | Enrollee supplies subject | Critical |
+| ESC2 | Any Purpose / No EKU | High |
+| ESC3 | Enrollment agent abuse | High |
+| ESC4 | Vulnerable template ACLs | High |
+| ESC5 | PKI object ACL abuse | High |
+| ESC7 | CA management rights | Critical |
+| ESC8 | NTLM relay to web enrollment | Critical |
+
+### Infrastructure Security
+
+| Check | What It Detects |
+|-------|-----------------|
+| Kerberos Encryption | Accounts using only RC4 (weak) |
+| Stale Computers | Machines with old passwords (60/90/180 days) |
+| DCShadow Indicators | Rogue DC SPNs on non-DC computers |
+| LDAP Signing | Whether signing is enforced |
+| SMB Signing | DC SMB signing configuration |
+| NTLM Settings | LmCompatibilityLevel and restrictions |
+
+### Delegation Audit
+
+| Type | Risk | Detection |
+|------|------|-----------|
+| Unconstrained | Critical | TGT collection, credential theft |
+| Constrained + T2A4D | Critical | Impersonation without creds |
+| Constrained | High | Limited impersonation |
+| RBCD | Medium | Requires write to target |
 
 ## Configuration
 
-### Active Directory Connection
-Navigate to the **AD Connection** tab and provide:
-- **LDAP Server**: Your AD server address (e.g., `ldap.company.com:389`)
-- **Username**: Service account DN or UPN
-- **Password**: Service account password
-- **Base DN**: Search base (e.g., `DC=company,DC=com`)
+### Recommended Service Account Permissions
 
-### Security Recommendations
-1. Use a dedicated service account with minimal required permissions
-2. Implement LDAPS (port 636) for encrypted connections in production
-3. Enable audit logging on your AD server
-4. Regularly review disabled user accounts
-5. Implement MFA for platform access
+```
+Minimum permissions for read-only auditing:
+├── Read all user/computer/group objects
+├── Read userAccountControl, servicePrincipalName
+├── Read msDS-KeyCredentialLink
+├── Read nTSecurityDescriptor (for ACL analysis)
+├── Read Certificate Templates (CN=Configuration)
+└── Read GPO objects and SYSVOL
+```
 
-## Usage
+### Environment Variables
 
-### Incident Response Workflow
+```bash
+# Optional: Override default timeouts
+AD_CONNECT_TIMEOUT=30        # Connection timeout (seconds)
+AD_OPERATION_TIMEOUT=120     # Query timeout (seconds)
+AD_MAX_CONNECTIONS=10        # Connection pool size
+```
 
-1. **Create Incident**: Document security events with priority and affected systems
-2. **Search Users**: Quickly find compromised or suspicious user accounts
-3. **Disable Accounts**: Immediately disable accounts during active incidents
-4. **Track Progress**: Update incident status through investigation lifecycle
-5. **Document Actions**: Add response actions for audit and review
+## Output
 
-### User Management
+### Risk Score Calculation
 
-- Search by name, username, or email
-- View user details including groups and status
-- Disable accounts with documented reasons
-- View account status in real-time
+```
+Domain Risk Score = Σ(Finding Weights)
 
-## Architecture
+Weights:
+├── Critical: 25-50 points
+├── High: 15-25 points
+├── Medium: 8-15 points
+└── Low: 3-8 points
 
-\`\`\`
-adsecurityscanner/
-├── src-tauri/              # Rust backend
-│   ├── src/
-│   │   ├── main.rs         # Tauri commands and app state
-│   │   ├── ad_client.rs    # Active Directory integration
-│   │   └── incident.rs     # Incident data structures
-│   └── Cargo.toml
-├── app/                    # Next.js frontend
-│   ├── page.tsx            # Main application shell
-│   └── globals.css         # Theme and styling
-├── components/             # React components
-│   ├── dashboard-view.tsx
-│   ├── incident-manager.tsx
-│   ├── user-management.tsx
-│   └── ad-connection.tsx
-└── lib/
-    └── tauri-api.ts        # TypeScript API bindings
-\`\`\`
+Risk Levels:
+├── 0-20:   Low Risk
+├── 21-40:  Medium Risk
+├── 41-70:  High Risk
+└── 71-100: Critical Risk
+```
 
-## Development
+### Export Formats
 
-### Adding New Commands
+- **JSON** - Full structured data
+- **PDF** - Executive summary reports
+- **CSV** - Spreadsheet-compatible findings
 
-1. Define the Rust command in `src-tauri/src/main.rs`
-2. Add TypeScript bindings in `src/lib/tauri-api.ts`
-3. Use in React components
+## Security Considerations
 
-### Customization
+### Credential Handling
 
-- **Theme**: Modify `app/globals.css` design tokens
-- **AD Operations**: Extend `src-tauri/src/ad_client.rs`
-- **Incident Fields**: Update `src-tauri/src/incident.rs`
+- Credentials stored in zeroized memory (`zeroize` crate)
+- GSSAPI eliminates password storage entirely
+- No credentials written to disk or logs
 
-## Important Notes
+### Network Security
 
-⚠️ **Active Directory Operations**: The current implementation includes a simulated disable operation. For production use, you must implement the actual LDAP modify operation to set the `userAccountControl` attribute.
+| Mode | Encryption | Recommendation |
+|------|------------|----------------|
+| LDAP + GSSAPI | Kerberos encryption | Good |
+| LDAPS | TLS 1.2+ | Good |
+| LDAP + Simple | **None** | Avoid in production |
 
-⚠️ **Security**: This platform handles sensitive security operations. Always:
-- Use encrypted connections (LDAPS)
-- Implement proper authentication and authorization
-- Enable comprehensive audit logging
-- Follow your organization's security policies
-- Test thoroughly in a non-production environment first
+### Audit Logging
+
+All operations logged with:
+- Timestamp
+- Principal (authenticated user)
+- Operation type
+- Target objects
+- Result status
+
+## Comparison with Other Tools
+
+| Feature | ADSecurityAudit | PingCastle | Purple Knight |
+|---------|-----------------|------------|---------------|
+| Open Source | Yes | Partial | No |
+| GSSAPI Auth | Yes | No | No |
+| Real-time | Yes | No | No |
+| ESC1-8 Detection | Yes | Yes | Yes |
+| DCShadow Detection | Yes | No | Yes |
+| Multi-Forest | Yes | Yes | Yes |
+| Risk Scoring | Yes | Yes | Yes |
+| Custom Rules | Planned | Limited | No |
+
+## Project Structure
+
+```
+ADSecurityAudit-Rust/
+├── src-tauri/src/           # Rust backend
+│   ├── auth.rs              # Authentication (GSSAPI/Simple)
+│   ├── ad_client.rs         # Main AD client (~6000 lines)
+│   ├── da_equivalence.rs    # DA equivalent detection
+│   ├── delegation_audit.rs  # Kerberos delegation
+│   ├── infrastructure_audit.rs # NTLM, Kerberos, DCShadow
+│   ├── privileged_accounts.rs  # Tier classification
+│   ├── domain_security.rs   # Password policy, features
+│   ├── domain_trust_audit.rs # Trust analysis
+│   ├── gpo_audit.rs         # GPO security
+│   ├── permissions_audit.rs # ACL analysis
+│   ├── group_audit.rs       # Group membership
+│   ├── risk_scoring.rs      # Risk calculations
+│   ├── anomaly_detection.rs # Behavioral analysis
+│   ├── audit_log.rs         # Compliance logging
+│   ├── connection_pool.rs   # LDAP connection management
+│   └── forest_manager.rs    # Multi-domain support
+├── app/                     # Next.js frontend
+├── components/              # React components
+└── lib/                     # TypeScript utilities
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Run tests: `cd src-tauri && cargo test`
+4. Submit a pull request
+
+## References
+
+- [MITRE ATT&CK - Active Directory](https://attack.mitre.org/techniques/T1087/)
+- [SpecterOps - Certified Pre-Owned](https://posts.specterops.io/certified-pre-owned-d95910965cd2)
+- [Harmj0y - Kerberos Delegation](https://blog.harmj0y.net/activedirectory/s4u2pwnage/)
+- [Microsoft - AD Security Best Practices](https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/)
 
 ## License
 
-MIT License - See LICENSE file for details
-
-## Support
-
-For issues and questions:
-- Review the documentation
-- Check Active Directory connectivity
-- Verify service account permissions
-- Review application logs
+MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-Built for enterprise security teams to respond faster and more effectively to security incidents.
+Built for security teams who need comprehensive AD visibility.

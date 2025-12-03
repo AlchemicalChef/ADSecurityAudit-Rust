@@ -5539,4 +5539,866 @@ impl ActiveDirectoryClient {
 
         Ok(policy)
     }
+
+    // ==========================================
+    // Phase 1 Gap Analysis: New Security Checks
+    // ==========================================
+
+    /// Audit Kerberos encryption settings to detect weak RC4 usage
+    ///
+    /// Checks msDS-SupportedEncryptionTypes for accounts that only support
+    /// RC4-HMAC-MD5 encryption, which is vulnerable to offline cracking.
+    pub async fn audit_kerberos_encryption(&self) -> Result<crate::infrastructure_audit::KerberosEncryptionAudit> {
+        use crate::infrastructure_audit::{KerberosEncryptionAudit, KerberosEncryptionStatus};
+
+        info!("audit_kerberos_encryption: Starting Kerberos encryption audit...");
+
+        let ldap = self.get_connection().await?;
+
+        // Query accounts with explicit encryption type settings
+        // Also include service accounts (with SPNs) and privileged accounts (adminCount=1)
+        let filter = "(|(msDS-SupportedEncryptionTypes=*)(servicePrincipalName=*)(adminCount=1))";
+        let attrs = vec![
+            "distinguishedName",
+            "sAMAccountName",
+            "objectClass",
+            "msDS-SupportedEncryptionTypes",
+            "servicePrincipalName",
+            "adminCount",
+            "userAccountControl",
+        ];
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            filter,
+            attrs,
+        ).await?;
+
+        let mut audit = KerberosEncryptionAudit::default();
+        let mut weak_accounts = Vec::new();
+
+        for entry in rs {
+            let entry = SearchEntry::construct(entry);
+
+            let sam_account_name = entry.get_string_attr("sAMAccountName");
+            let dn = entry.get_string_attr("distinguishedName");
+
+            // Determine account type
+            let object_classes = entry.attrs.get("objectClass")
+                .cloned()
+                .unwrap_or_default();
+            let account_type = if object_classes.iter().any(|c| c.to_lowercase() == "computer") {
+                "Computer"
+            } else if object_classes.iter().any(|c| c.to_lowercase() == "user") {
+                "User"
+            } else {
+                "Other"
+            };
+
+            // Get encryption types (0 means use domain defaults)
+            let encryption_types = entry.get_optional_u32_attr("msDS-SupportedEncryptionTypes")
+                .unwrap_or(0);
+
+            // Check if privileged (adminCount=1)
+            let is_privileged = entry.get_optional_u32_attr("adminCount")
+                .map(|v| v == 1)
+                .unwrap_or(false);
+
+            // Check if has SPNs (Kerberoastable)
+            let has_spn = entry.attrs.get("servicePrincipalName")
+                .map(|v| !v.is_empty())
+                .unwrap_or(false);
+
+            let status = KerberosEncryptionStatus::from_encryption_types(
+                &sam_account_name,
+                &dn,
+                account_type,
+                encryption_types,
+                is_privileged,
+                has_spn,
+            );
+
+            audit.total_accounts_audited += 1;
+
+            if status.rc4_enabled {
+                audit.rc4_enabled_count += 1;
+            }
+
+            // Track accounts with weak-only encryption
+            if status.only_weak_encryption {
+                audit.weak_only_count += 1;
+                if is_privileged {
+                    audit.privileged_weak_count += 1;
+                }
+                if has_spn && account_type == "User" {
+                    audit.kerberoastable_weak_count += 1;
+                }
+                weak_accounts.push(status);
+            }
+        }
+
+        audit.weak_encryption_accounts = weak_accounts;
+
+        Self::unbind_with_timeout(ldap).await;
+
+        info!("audit_kerberos_encryption: Complete - {} accounts audited, {} with weak-only encryption",
+            audit.total_accounts_audited, audit.weak_only_count);
+
+        Ok(audit)
+    }
+
+    /// Audit stale computer accounts based on password age
+    ///
+    /// Computers should rotate passwords every 30 days by default.
+    /// Accounts with password age > 60 days may indicate orphaned systems.
+    pub async fn audit_stale_computers(&self) -> Result<crate::infrastructure_audit::StaleComputerAudit> {
+        use crate::infrastructure_audit::{StaleComputerAudit, StaleComputerAccount};
+
+        info!("audit_stale_computers: Starting stale computer audit...");
+
+        let ldap = self.get_connection().await?;
+
+        let filter = "(objectClass=computer)";
+        let attrs = vec![
+            "distinguishedName",
+            "sAMAccountName",
+            "dNSHostName",
+            "operatingSystem",
+            "pwdLastSet",
+            "lastLogonTimestamp",
+            "userAccountControl",
+        ];
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            filter,
+            attrs,
+        ).await?;
+
+        let mut audit = StaleComputerAudit::default();
+        let now = chrono::Utc::now();
+        let mut stale_computers = Vec::new();
+
+        for entry in rs {
+            let entry = SearchEntry::construct(entry);
+
+            let sam_account_name = entry.get_string_attr("sAMAccountName");
+            let dn = entry.get_string_attr("distinguishedName");
+            let dns_hostname = entry.get_optional_attr("dNSHostName");
+            let operating_system = entry.get_optional_attr("operatingSystem");
+
+            // Parse pwdLastSet (Windows FILETIME - 100ns intervals since 1601)
+            let pwd_last_set_raw = entry.get_optional_i64_attr("pwdLastSet").unwrap_or(0);
+            let (password_last_set, password_age_days) = if pwd_last_set_raw > 0 {
+                let pwd_set_time = Self::filetime_to_datetime(pwd_last_set_raw);
+                let age_days = (now - pwd_set_time).num_days() as u32;
+                (Some(pwd_set_time.to_rfc3339()), age_days)
+            } else {
+                (None, u32::MAX) // Never set
+            };
+
+            // Parse lastLogonTimestamp
+            let last_logon_raw = entry.get_optional_i64_attr("lastLogonTimestamp").unwrap_or(0);
+            let (last_logon, last_logon_days) = if last_logon_raw > 0 {
+                let logon_time = Self::filetime_to_datetime(last_logon_raw);
+                let days = (now - logon_time).num_days() as u32;
+                (Some(logon_time.to_rfc3339()), Some(days))
+            } else {
+                (None, None)
+            };
+
+            // Check if enabled (UAC bit 0x2 = disabled)
+            let uac = entry.get_optional_u32_attr("userAccountControl").unwrap_or(0);
+            let enabled = (uac & 0x2) == 0;
+
+            // Check if Domain Controller (UAC bit 0x2000 = SERVER_TRUST_ACCOUNT)
+            let is_domain_controller = (uac & 0x2000) != 0;
+
+            // Check if server OS
+            let is_server = operating_system
+                .as_ref()
+                .map(|os| os.to_lowercase().contains("server"))
+                .unwrap_or(false);
+
+            audit.total_computers += 1;
+
+            // Track stale computers (password age > 60 days)
+            if password_age_days > 60 {
+                let stale_computer = StaleComputerAccount {
+                    sam_account_name: sam_account_name.clone(),
+                    distinguished_name: dn,
+                    dns_hostname,
+                    operating_system,
+                    password_last_set,
+                    password_age_days,
+                    last_logon,
+                    last_logon_days,
+                    enabled,
+                    is_domain_controller,
+                    is_server,
+                };
+
+                audit.stale_60_days_count += 1;
+
+                if password_age_days > 90 {
+                    audit.stale_90_days_count += 1;
+                }
+
+                if password_age_days > 180 {
+                    audit.stale_180_days_count += 1;
+                }
+
+                if enabled {
+                    audit.enabled_stale_count += 1;
+                }
+
+                stale_computers.push(stale_computer);
+            }
+
+            // Track computers that have never logged in
+            if last_logon_days.is_none() && enabled {
+                audit.never_logged_in_count += 1;
+            }
+        }
+
+        // Sort by password age descending
+        stale_computers.sort_by(|a, b| b.password_age_days.cmp(&a.password_age_days));
+        audit.stale_computers = stale_computers;
+
+        Self::unbind_with_timeout(ldap).await;
+
+        info!("audit_stale_computers: Complete - {} computers, {} stale (>60 days)",
+            audit.total_computers, audit.stale_60_days_count);
+
+        Ok(audit)
+    }
+
+    /// Helper to convert Windows FILETIME to chrono DateTime
+    fn filetime_to_datetime(filetime: i64) -> DateTime<Utc> {
+        // Windows FILETIME: 100-nanosecond intervals since January 1, 1601
+        // Unix epoch: January 1, 1970
+        // Difference: 11644473600 seconds
+        const FILETIME_UNIX_DIFF: i64 = 11644473600;
+
+        let seconds = (filetime / 10_000_000) - FILETIME_UNIX_DIFF;
+        DateTime::from_timestamp(seconds, 0).unwrap_or_else(|| Utc::now())
+    }
+
+    /// Detect DCShadow attack indicators - rogue DC SPNs on non-DC computers
+    ///
+    /// DCShadow attack involves registering SPNs that make a computer appear
+    /// to be a Domain Controller for rogue replication.
+    pub async fn check_dcshadow_indicators(&self) -> Result<crate::infrastructure_audit::DCShadowAudit> {
+        use crate::infrastructure_audit::{DCShadowAudit, DCShadowIndicator, DCShadowIndicatorType};
+
+        info!("check_dcshadow_indicators: Starting DCShadow detection...");
+
+        let ldap = self.get_connection().await?;
+
+        // First, get all actual Domain Controllers
+        let dc_filter = "(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))";
+        let (dc_rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            dc_filter,
+            vec!["distinguishedName", "sAMAccountName"],
+        ).await?;
+
+        let actual_dcs: std::collections::HashSet<String> = dc_rs
+            .into_iter()
+            .map(|e| {
+                let entry = SearchEntry::construct(e);
+                entry.get_string_attr("distinguishedName").to_lowercase()
+            })
+            .collect();
+
+        let actual_dc_count = actual_dcs.len() as u32;
+
+        // Now search for computers with suspicious DC-like SPNs
+        // These SPNs should only exist on Domain Controllers:
+        // - GC/ (Global Catalog)
+        // - E3514235-4B06-11D1-AB04-00C04FC2DCD2/ (Directory Replication)
+        // - Dfsr-12F9A27C-BF97-4787-9364-D31B6C55EB04/ (DFS Replication)
+        let suspicious_spn_filter = "(|(\
+            servicePrincipalName=GC/*)(\
+            servicePrincipalName=E3514235-4B06-11D1-AB04-00C04FC2DCD2/*)(\
+            servicePrincipalName=Dfsr-12F9A27C-BF97-4787-9364-D31B6C55EB04/*))";
+
+        let computer_filter = format!("(&(objectClass=computer){})", suspicious_spn_filter);
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            &computer_filter,
+            vec![
+                "distinguishedName",
+                "sAMAccountName",
+                "dNSHostName",
+                "servicePrincipalName",
+                "operatingSystem",
+                "userAccountControl",
+                "whenCreated",
+                "whenChanged",
+            ],
+        ).await?;
+
+        let mut audit = DCShadowAudit {
+            actual_dc_count,
+            ..Default::default()
+        };
+
+        let mut indicators = Vec::new();
+
+        for entry in rs {
+            let entry = SearchEntry::construct(entry);
+
+            let dn = entry.get_string_attr("distinguishedName");
+            let sam_account_name = entry.get_string_attr("sAMAccountName");
+            let dns_hostname = entry.get_optional_attr("dNSHostName");
+            let operating_system = entry.get_optional_attr("operatingSystem");
+            let when_created = entry.get_optional_attr("whenCreated");
+            let when_changed = entry.get_optional_attr("whenChanged");
+
+            // Check if this is actually a DC
+            let uac = entry.get_optional_u32_attr("userAccountControl").unwrap_or(0);
+            let is_actual_dc = (uac & 0x2000) != 0 || actual_dcs.contains(&dn.to_lowercase());
+
+            let all_spns: Vec<String> = entry.attrs.get("servicePrincipalName")
+                .cloned()
+                .unwrap_or_default();
+
+            // Skip if this is an actual DC
+            if is_actual_dc {
+                continue;
+            }
+
+            // Check for suspicious SPNs on non-DC computers
+            for spn in &all_spns {
+                let spn_lower = spn.to_lowercase();
+
+                let indicator_type = if spn_lower.starts_with("gc/") {
+                    Some(DCShadowIndicatorType::GlobalCatalog)
+                } else if spn_lower.starts_with("e3514235-4b06-11d1-ab04-00c04fc2dcd2/") {
+                    Some(DCShadowIndicatorType::DirectoryReplication)
+                } else if spn_lower.starts_with("dfsr-12f9a27c-bf97-4787-9364-d31b6c55eb04/") {
+                    Some(DCShadowIndicatorType::DfsReplication)
+                } else {
+                    None
+                };
+
+                if let Some(ind_type) = indicator_type {
+                    let indicator = DCShadowIndicator {
+                        sam_account_name: sam_account_name.clone(),
+                        distinguished_name: dn.clone(),
+                        dns_hostname: dns_hostname.clone(),
+                        suspicious_spn: spn.clone(),
+                        indicator_type: ind_type.clone(),
+                        is_actual_dc,
+                        all_spns: all_spns.clone(),
+                        operating_system: operating_system.clone(),
+                        when_created: when_created.clone(),
+                        when_changed: when_changed.clone(),
+                    };
+
+                    match ind_type {
+                        DCShadowIndicatorType::GlobalCatalog => audit.rogue_gc_count += 1,
+                        DCShadowIndicatorType::DirectoryReplication => audit.rogue_replication_count += 1,
+                        _ => {}
+                    }
+
+                    indicators.push(indicator);
+                }
+            }
+        }
+
+        audit.suspicious_computers_count = indicators.iter()
+            .map(|i| i.distinguished_name.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .len() as u32;
+        audit.indicators = indicators;
+
+        Self::unbind_with_timeout(ldap).await;
+
+        info!("check_dcshadow_indicators: Complete - {} suspicious computers found",
+            audit.suspicious_computers_count);
+
+        Ok(audit)
+    }
+
+    /// Extended infrastructure security audit including Phase 1 gap analysis checks
+    ///
+    /// Includes all base infrastructure checks plus:
+    /// - Kerberos encryption audit (RC4 weak encryption)
+    /// - Stale computer account detection
+    /// - DCShadow attack indicators
+    pub async fn audit_extended_infrastructure_security(&self) -> Result<crate::infrastructure_audit::ExtendedInfrastructureAudit> {
+        use crate::infrastructure_audit::ExtendedInfrastructureAudit;
+
+        info!("audit_extended_infrastructure_security: Starting extended infrastructure audit...");
+
+        // Run base infrastructure audit
+        let base_audit = self.audit_infrastructure_security().await?;
+
+        // Run Phase 1 gap analysis checks
+        let kerberos_encryption = match self.audit_kerberos_encryption().await {
+            Ok(audit) => audit,
+            Err(e) => {
+                warn!("Kerberos encryption audit failed: {}. Using defaults.", e);
+                crate::infrastructure_audit::KerberosEncryptionAudit::default()
+            }
+        };
+
+        let stale_computers = match self.audit_stale_computers().await {
+            Ok(audit) => audit,
+            Err(e) => {
+                warn!("Stale computer audit failed: {}. Using defaults.", e);
+                crate::infrastructure_audit::StaleComputerAudit::default()
+            }
+        };
+
+        let dcshadow_indicators = match self.check_dcshadow_indicators().await {
+            Ok(audit) => audit,
+            Err(e) => {
+                warn!("DCShadow detection failed: {}. Using defaults.", e);
+                crate::infrastructure_audit::DCShadowAudit::default()
+            }
+        };
+
+        // Phase 2: NTLM/Network security audit
+        let ntlm_security = match self.audit_ntlm_security().await {
+            Ok(audit) => audit,
+            Err(e) => {
+                warn!("NTLM security audit failed: {}. Using defaults.", e);
+                crate::infrastructure_audit::NtlmSecurityAudit::default()
+            }
+        };
+
+        info!("audit_extended_infrastructure_security: Complete");
+
+        Ok(ExtendedInfrastructureAudit::new(
+            base_audit,
+            kerberos_encryption,
+            stale_computers,
+            dcshadow_indicators,
+            ntlm_security,
+        ))
+    }
+
+    // ==========================================
+    // Phase 2 Gap Analysis: NTLM/Network Security
+    // ==========================================
+
+    /// Audit NTLM and network protocol security settings
+    ///
+    /// Checks:
+    /// - LDAP signing configuration
+    /// - LDAP channel binding
+    /// - SMB signing configuration
+    /// - LmCompatibilityLevel (NTLM restrictions)
+    /// - GPO security settings related to NTLM
+    pub async fn audit_ntlm_security(&self) -> Result<crate::infrastructure_audit::NtlmSecurityAudit> {
+        use crate::infrastructure_audit::*;
+
+        info!("audit_ntlm_security: Starting NTLM/network security audit...");
+
+        // Check LDAP signing status
+        let ldap_signing = self.check_ldap_signing_status().await.unwrap_or_default();
+
+        // Check SMB signing via GPO analysis
+        let (smb_signing, gpo_settings) = self.check_smb_signing_via_gpo().await
+            .unwrap_or((SmbSigningStatus::default(), Vec::new()));
+
+        // Check NTLM restrictions (LmCompatibilityLevel)
+        let ntlm_settings = self.check_ntlm_restrictions().await.unwrap_or_default();
+
+        // Calculate overall security score
+        let ntlm_security_score = Self::calculate_ntlm_security_score(
+            &ldap_signing,
+            &smb_signing,
+            &ntlm_settings,
+        );
+
+        let security_level = match ntlm_security_score {
+            0..=25 => "Critical",
+            26..=50 => "Poor",
+            51..=75 => "Moderate",
+            76..=90 => "Good",
+            _ => "Excellent",
+        }.to_string();
+
+        info!("audit_ntlm_security: Complete - Score: {}/100 ({})",
+            ntlm_security_score, security_level);
+
+        Ok(NtlmSecurityAudit {
+            ldap_signing,
+            smb_signing,
+            ntlm_settings,
+            gpo_security_settings: gpo_settings,
+            ntlm_security_score,
+            security_level,
+        })
+    }
+
+    /// Check LDAP signing status by testing connection and parsing GPOs
+    async fn check_ldap_signing_status(&self) -> Result<crate::infrastructure_audit::LdapSigningStatus> {
+        use crate::infrastructure_audit::LdapSigningStatus;
+
+        info!("Checking LDAP signing status...");
+
+        let mut status = LdapSigningStatus::default();
+
+        // Method 1: Check if our current connection required signing
+        // If we connected successfully with simple bind over non-TLS, signing may not be required
+        // The connection error handling in connect() already detects signing requirements
+
+        // Method 2: Query GPOs for LDAP signing policy
+        // Look for "MACHINE\System\CurrentControlSet\Services\NTDS\Parameters\LDAPServerIntegrity"
+        let ldap = self.get_connection().await?;
+
+        // Search for GPO objects that might contain security settings
+        let gpo_filter = "(objectClass=groupPolicyContainer)";
+        let (gpos, ldap) = self.search_with_timeout(
+            ldap,
+            &format!("CN=Policies,CN=System,{}", self.base_dn),
+            Scope::OneLevel,
+            gpo_filter,
+            vec!["cn", "displayName", "gPCFileSysPath"],
+        ).await?;
+
+        let mut found_ldap_policy = false;
+
+        for gpo in gpos {
+            let entry = SearchEntry::construct(gpo);
+            let gpo_name = entry.get_optional_attr("displayName")
+                .unwrap_or_else(|| entry.get_string_attr("cn"));
+            let gpc_path = entry.get_optional_attr("gPCFileSysPath");
+
+            // Default Domain Controllers Policy typically has LDAP signing settings
+            if gpo_name.to_lowercase().contains("default domain controllers policy") {
+                status.config_source = format!("GPO: {}", gpo_name);
+                // On secure DCs, this should be set to "Require signing" (2)
+                // We'll assume if Default Domain Controllers Policy exists,
+                // check is needed via SYSVOL parsing
+                if gpc_path.is_some() {
+                    found_ldap_policy = true;
+                }
+            }
+        }
+
+        // Method 3: Try to detect if signing is enforced by analyzing the connection type
+        // If we're connected via LDAPS (port 636), that's already secure
+        let using_ldaps = self.server.contains(":636") || self.server.starts_with("ldaps://");
+
+        if using_ldaps {
+            status.signing_status = "LDAPS in use - Channel encryption active".to_string();
+            status.is_secure = true;
+            status.config_source = "LDAPS Connection".to_string();
+        } else if found_ldap_policy {
+            status.signing_status = "Check GPO: Default Domain Controllers Policy".to_string();
+            // Without SYSVOL access, we can't definitively know the setting
+        }
+
+        // Check Windows Server 2025+ default behavior
+        // Starting with Windows Server 2025, LDAP channel binding is enabled by default
+        let domain_level = self.get_domain_functional_level().await.ok();
+        if let Some(level) = domain_level {
+            if level >= 7 {
+                // Windows Server 2016+ domain functional level
+                status.signing_status = format!("{} (Domain FL: {})",
+                    status.signing_status, level);
+            }
+        }
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok(status)
+    }
+
+    /// Check SMB signing configuration via GPO analysis
+    async fn check_smb_signing_via_gpo(&self) -> Result<(
+        crate::infrastructure_audit::SmbSigningStatus,
+        Vec<crate::infrastructure_audit::GpoSecuritySetting>
+    )> {
+        use crate::infrastructure_audit::{SmbSigningStatus, GpoSecuritySetting};
+
+        info!("Checking SMB signing configuration...");
+
+        let mut status = SmbSigningStatus::default();
+        let mut settings = Vec::new();
+
+        let ldap = self.get_connection().await?;
+
+        // Find Default Domain Controllers Policy and Default Domain Policy
+        let gpo_filter = "(objectClass=groupPolicyContainer)";
+        let (gpos, ldap) = self.search_with_timeout(
+            ldap,
+            &format!("CN=Policies,CN=System,{}", self.base_dn),
+            Scope::OneLevel,
+            gpo_filter,
+            vec!["cn", "displayName", "gPCFileSysPath", "distinguishedName"],
+        ).await?;
+
+        for gpo in gpos {
+            let entry = SearchEntry::construct(gpo);
+            let gpo_name = entry.get_optional_attr("displayName")
+                .unwrap_or_else(|| entry.get_string_attr("cn"));
+            let gpo_dn = entry.get_string_attr("distinguishedName");
+            let gpc_path = entry.get_optional_attr("gPCFileSysPath");
+
+            // Look for policies that typically contain SMB signing settings
+            let is_dc_policy = gpo_name.to_lowercase().contains("default domain controllers");
+            let is_domain_policy = gpo_name.to_lowercase().contains("default domain policy");
+
+            if is_dc_policy {
+                status.source_gpo = Some(gpo_name.clone());
+                status.detected_via_gpo = true;
+
+                // Default Domain Controllers Policy should have SMB signing required
+                // for DCs as a security baseline
+                settings.push(GpoSecuritySetting {
+                    gpo_name: gpo_name.clone(),
+                    gpo_dn: gpo_dn.clone(),
+                    category: "SMB Signing".to_string(),
+                    setting_name: "Microsoft network server: Digitally sign communications (always)".to_string(),
+                    setting_value: "Check SYSVOL for actual value".to_string(),
+                    is_secure: false, // Unknown until we parse SYSVOL
+                    source_file: gpc_path.clone(),
+                });
+
+                // Note: Without direct SYSVOL access via SMB, we can't read the actual values
+                // The GPO settings are stored in:
+                // \\<domain>\SYSVOL\<domain>\Policies\{GUID}\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf
+            }
+
+            if is_domain_policy {
+                settings.push(GpoSecuritySetting {
+                    gpo_name: gpo_name.clone(),
+                    gpo_dn: gpo_dn.clone(),
+                    category: "NTLM Settings".to_string(),
+                    setting_name: "Network security: LAN Manager authentication level".to_string(),
+                    setting_value: "Check SYSVOL for actual value".to_string(),
+                    is_secure: false,
+                    source_file: gpc_path,
+                });
+            }
+        }
+
+        // Check if domain is at a level where SMB signing is more likely enforced
+        // Windows Server 2016+ DCs require SMB signing by default
+        let dc_filter = "(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))";
+        let (dcs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            dc_filter,
+            vec!["operatingSystem", "operatingSystemVersion"],
+        ).await?;
+
+        let mut modern_dc_count = 0;
+        let mut legacy_dc_count = 0;
+
+        for dc in dcs {
+            let entry = SearchEntry::construct(dc);
+            let os = entry.get_optional_attr("operatingSystem").unwrap_or_default();
+
+            // Windows Server 2016+ have SMB signing required by default
+            if os.contains("2016") || os.contains("2019") || os.contains("2022") || os.contains("2025") {
+                modern_dc_count += 1;
+            } else if os.contains("2012") || os.contains("2008") {
+                legacy_dc_count += 1;
+                status.security_issues.push(format!(
+                    "Legacy DC detected: {} - may have weaker default SMB signing",
+                    os
+                ));
+            }
+        }
+
+        // If all DCs are modern, assume SMB signing is likely required
+        if legacy_dc_count == 0 && modern_dc_count > 0 {
+            status.dc_signing_required = Some(true);
+            status.is_secure = true;
+        }
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok((status, settings))
+    }
+
+    /// Check NTLM restriction settings (LmCompatibilityLevel)
+    async fn check_ntlm_restrictions(&self) -> Result<crate::infrastructure_audit::NtlmRestrictionStatus> {
+        use crate::infrastructure_audit::NtlmRestrictionStatus;
+
+        info!("Checking NTLM restrictions (LmCompatibilityLevel)...");
+
+        let mut status = NtlmRestrictionStatus::default();
+
+        // LmCompatibilityLevel is stored in registry, not directly in AD
+        // However, we can infer some information:
+
+        // 1. Check domain functional level - higher levels have better defaults
+        let domain_level = self.get_domain_functional_level().await.ok();
+
+        if let Some(level) = domain_level {
+            // Windows Server 2008 R2+ (FL 4+) typically defaults to LmCompatibilityLevel 3
+            // Windows Server 2016+ (FL 7+) often configured for level 5
+            match level {
+                0..=3 => {
+                    status.compatibility_description = format!(
+                        "Domain FL {} - Legacy. Likely using weak NTLM settings.",
+                        level
+                    );
+                    status.is_secure = false;
+                    status.recommendations.push(
+                        "Upgrade domain functional level and configure LmCompatibilityLevel = 5".to_string()
+                    );
+                }
+                4..=6 => {
+                    status.compatibility_description = format!(
+                        "Domain FL {} - Check LmCompatibilityLevel in GPO (recommend level 5).",
+                        level
+                    );
+                    status.recommendations.push(
+                        "Verify Network Security > LAN Manager authentication level in GPO".to_string()
+                    );
+                }
+                _ => {
+                    status.compatibility_description = format!(
+                        "Domain FL {} - Modern. Likely using NTLMv2 only (check GPO to confirm).",
+                        level
+                    );
+                    status.is_secure = true;
+                }
+            }
+        }
+
+        // 2. Check for ms-DS-MachineAccountQuota (related to machine account NTLM)
+        let ldap = self.get_connection().await?;
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Base,
+            "(objectClass=domain)",
+            vec!["ms-DS-MachineAccountQuota", "msDS-Behavior-Version"],
+        ).await?;
+
+        if let Some(entry) = rs.into_iter().next() {
+            let entry = SearchEntry::construct(entry);
+
+            // ms-DS-MachineAccountQuota > 0 allows any user to join machines
+            // This can be abused with NTLM relay attacks
+            let quota = entry.get_optional_u32_attr("ms-DS-MachineAccountQuota");
+            if let Some(q) = quota {
+                if q > 0 {
+                    status.recommendations.push(format!(
+                        "ms-DS-MachineAccountQuota is {} (allows unprivileged users to join {} machines). \
+                         Consider setting to 0 to prevent NTLM relay attacks via machine account creation.",
+                        q, q
+                    ));
+                }
+            }
+        }
+
+        // 3. Check if NTLMv1 might be in use by looking for legacy systems
+        let legacy_filter = "(&(objectClass=computer)(|(operatingSystem=*2003*)(operatingSystem=*XP*)(operatingSystem=*2000*)))";
+        let (legacy_systems, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Subtree,
+            legacy_filter,
+            vec!["sAMAccountName", "operatingSystem"],
+        ).await?;
+
+        let legacy_count = legacy_systems.len();
+        if legacy_count > 0 {
+            status.ntlmv1_allowed = true;
+            status.is_secure = false;
+            status.recommendations.push(format!(
+                "Found {} legacy systems (Windows XP/2000/2003) that may require NTLMv1. \
+                 Upgrade or isolate these systems before enforcing NTLMv2 only.",
+                legacy_count
+            ));
+        }
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok(status)
+    }
+
+    /// Calculate overall NTLM security score
+    fn calculate_ntlm_security_score(
+        ldap_signing: &crate::infrastructure_audit::LdapSigningStatus,
+        smb_signing: &crate::infrastructure_audit::SmbSigningStatus,
+        ntlm_settings: &crate::infrastructure_audit::NtlmRestrictionStatus,
+    ) -> u32 {
+        let mut score = 0u32;
+
+        // LDAP signing (30 points)
+        if ldap_signing.is_secure {
+            score += 30;
+        } else if ldap_signing.signing_enforced_detected {
+            score += 20;
+        } else if ldap_signing.channel_binding_enabled == Some(true) {
+            score += 15;
+        }
+
+        // SMB signing (30 points)
+        if smb_signing.is_secure {
+            score += 30;
+        } else if smb_signing.dc_signing_required == Some(true) {
+            score += 25;
+        } else if smb_signing.signing_enabled == Some(true) {
+            score += 10;
+        }
+
+        // NTLM restrictions (40 points)
+        if ntlm_settings.is_secure {
+            score += 40;
+        } else if !ntlm_settings.ntlmv1_allowed {
+            score += 30;
+        } else if ntlm_settings.lm_compatibility_level.unwrap_or(0) >= 3 {
+            score += 20;
+        }
+
+        // Deductions
+        if smb_signing.smb1_enabled == Some(true) {
+            score = score.saturating_sub(20);
+        }
+
+        if !smb_signing.security_issues.is_empty() {
+            score = score.saturating_sub(5 * smb_signing.security_issues.len() as u32);
+        }
+
+        score.min(100)
+    }
+
+    /// Get domain functional level
+    async fn get_domain_functional_level(&self) -> Result<u32> {
+        let ldap = self.get_connection().await?;
+
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Base,
+            "(objectClass=domain)",
+            vec!["msDS-Behavior-Version"],
+        ).await?;
+
+        let level = rs.into_iter().next()
+            .map(|e| {
+                let entry = SearchEntry::construct(e);
+                entry.get_optional_u32_attr("msDS-Behavior-Version").unwrap_or(0)
+            })
+            .unwrap_or(0);
+
+        Self::unbind_with_timeout(ldap).await;
+
+        Ok(level)
+    }
 }

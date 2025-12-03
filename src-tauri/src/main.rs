@@ -30,6 +30,7 @@ mod domain_discovery;
 mod infrastructure_audit;
 mod common_types;
 mod ldap_helpers;
+mod auth;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;

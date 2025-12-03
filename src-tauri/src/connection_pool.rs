@@ -1,6 +1,15 @@
 //! LDAP Connection Pool with automatic health checking and reconnection
 //! Provides high-performance connection management for large AD environments
 //!
+//! # Authentication Support
+//!
+//! The pool supports multiple authentication methods:
+//! - **GSSAPI/Kerberos**: Windows integrated auth (recommended)
+//! - **Simple Bind**: Username/password authentication
+//!
+//! When `use_gssapi` is enabled, the pool will use the current Windows user's
+//! Kerberos ticket for authentication, eliminating the need to store passwords.
+//!
 // Allow unused code - connection pooling features for future optimization
 #![allow(dead_code)]
 
@@ -11,6 +20,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Semaphore, RwLock, OwnedSemaphorePermit};
 use tracing::{info, warn, error, debug};
+
+use crate::auth::{AuthConfig, AuthMethod, Authenticator, AuthResult};
 
 /// Connection pool configuration
 #[derive(Debug, Clone)]
@@ -68,7 +79,7 @@ pub struct PoolStats {
 /// High-performance LDAP connection pool
 pub struct LdapConnectionPool {
     server: String,
-    credentials: crate::secure_types::Credentials,
+    credentials: Option<crate::secure_types::Credentials>,
     base_dn: String,
     use_ldaps: bool,
     config: PoolConfig,
@@ -76,10 +87,14 @@ pub struct LdapConnectionPool {
     semaphore: Arc<Semaphore>,
     stats: RwLock<PoolStats>,
     next_id: RwLock<u64>,
+    /// Authentication method to use
+    auth_method: AuthMethod,
+    /// Last authentication result (for diagnostics)
+    last_auth_result: RwLock<Option<AuthResult>>,
 }
 
 impl LdapConnectionPool {
-    /// Create a new connection pool
+    /// Create a new connection pool with simple bind (username/password)
     pub fn new(
         server: String,
         username: String,
@@ -96,6 +111,73 @@ impl LdapConnectionPool {
 
         Self {
             server,
+            credentials: Some(credentials),
+            base_dn,
+            use_ldaps,
+            config,
+            connections: RwLock::new(Vec::with_capacity(max_connections)),
+            semaphore: Arc::new(Semaphore::new(max_connections)),
+            stats: RwLock::new(PoolStats::default()),
+            next_id: RwLock::new(0),
+            auth_method: AuthMethod::Simple,
+            last_auth_result: RwLock::new(None),
+        }
+    }
+
+    /// Create a new connection pool with GSSAPI/Kerberos authentication
+    ///
+    /// Uses the current Windows user's Kerberos ticket for authentication.
+    /// No username/password required - uses integrated Windows authentication.
+    pub fn new_with_gssapi(
+        server: String,
+        base_dn: String,
+        config: Option<PoolConfig>,
+    ) -> Self {
+        let use_ldaps = server.ends_with(":636") || server.contains("ldaps://");
+        let config = config.unwrap_or_default();
+        let max_connections = config.max_connections;
+
+        info!("Creating GSSAPI-authenticated connection pool to {}", server);
+
+        Self {
+            server,
+            credentials: None, // GSSAPI doesn't need stored credentials
+            base_dn,
+            use_ldaps,
+            config,
+            connections: RwLock::new(Vec::with_capacity(max_connections)),
+            semaphore: Arc::new(Semaphore::new(max_connections)),
+            stats: RwLock::new(PoolStats::default()),
+            next_id: RwLock::new(0),
+            auth_method: AuthMethod::Gssapi,
+            last_auth_result: RwLock::new(None),
+        }
+    }
+
+    /// Create a connection pool with automatic authentication method selection
+    ///
+    /// Tries GSSAPI first, falls back to simple bind if credentials provided.
+    pub fn new_auto(
+        server: String,
+        username: Option<String>,
+        password: Option<String>,
+        base_dn: String,
+        config: Option<PoolConfig>,
+    ) -> Self {
+        let use_ldaps = server.ends_with(":636") || server.contains("ldaps://");
+        let config = config.unwrap_or_default();
+        let max_connections = config.max_connections;
+
+        let credentials = match (username, password) {
+            (Some(u), Some(p)) => Some(crate::secure_types::Credentials::new(u, p)),
+            _ => None,
+        };
+
+        info!("Creating auto-auth connection pool to {} (has credentials: {})",
+              server, credentials.is_some());
+
+        Self {
+            server,
             credentials,
             base_dn,
             use_ldaps,
@@ -104,7 +186,19 @@ impl LdapConnectionPool {
             semaphore: Arc::new(Semaphore::new(max_connections)),
             stats: RwLock::new(PoolStats::default()),
             next_id: RwLock::new(0),
+            auth_method: AuthMethod::Auto,
+            last_auth_result: RwLock::new(None),
         }
+    }
+
+    /// Get the authentication method being used
+    pub fn auth_method(&self) -> AuthMethod {
+        self.auth_method
+    }
+
+    /// Get the last authentication result
+    pub async fn last_auth_result(&self) -> Option<AuthResult> {
+        self.last_auth_result.read().await.clone()
     }
 
     /// Get the base DN
@@ -193,9 +287,58 @@ impl LdapConnectionPool {
         })
     }
 
-    /// Create a new LDAP connection
+    /// Create a new LDAP connection using the configured authentication method
     async fn create_connection(&self) -> Result<Ldap> {
-        // Disable TLS cert verification for enterprise compatibility with internal CAs
+        // Build auth config based on pool settings
+        let port = if self.use_ldaps { 636 } else { 389 };
+        let server = self.server.trim_start_matches("ldap://").trim_start_matches("ldaps://");
+        let server = server.split(':').next().unwrap_or(server);
+
+        let auth_config = AuthConfig {
+            method: self.auth_method,
+            server: server.to_string(),
+            server_fqdn: Some(server.to_string()),
+            port,
+            use_tls: self.use_ldaps,
+            credentials: self.credentials.clone(),
+            connect_timeout: self.config.connect_timeout,
+            skip_tls_verify: true, // Enterprise compatibility with internal CAs
+        };
+
+        info!(
+            "Creating LDAP connection to {}:{} (method: {}, TLS: {})",
+            server, port, self.auth_method, self.use_ldaps
+        );
+
+        let authenticator = Authenticator::new(auth_config);
+        let (ldap, auth_result) = authenticator.connect_and_bind().await?;
+
+        // Store the auth result for diagnostics
+        {
+            let mut last_result = self.last_auth_result.write().await;
+            *last_result = Some(auth_result.clone());
+        }
+
+        // Log warnings if any
+        for warning in &auth_result.warnings {
+            warn!("Auth warning: {}", warning);
+        }
+
+        info!(
+            "LDAP authentication successful (method: {}, principal: {}, encrypted: {})",
+            auth_result.method_used,
+            auth_result.principal.as_deref().unwrap_or("unknown"),
+            auth_result.encrypted
+        );
+
+        Ok(ldap)
+    }
+
+    /// Create a connection using simple bind (legacy method for backward compatibility)
+    async fn create_connection_simple_bind(&self) -> Result<Ldap> {
+        let credentials = self.credentials.as_ref()
+            .ok_or_else(|| anyhow!("Simple bind requires credentials"))?;
+
         let settings = LdapConnSettings::new()
             .set_conn_timeout(self.config.connect_timeout)
             .set_no_tls_verify(true);
@@ -206,7 +349,7 @@ impl LdapConnectionPool {
             format!("ldap://{}", self.server.replace("ldap://", ""))
         };
 
-        info!("Creating LDAP connection to {} (LDAPS: {})", url, self.use_ldaps);
+        info!("Creating LDAP connection to {} (LDAPS: {}) via simple bind", url, self.use_ldaps);
 
         let (conn, mut ldap) = LdapConnAsync::with_settings(settings, &url).await
             .map_err(|e| anyhow!("Failed to connect to LDAP server: {}", e))?;
@@ -219,12 +362,12 @@ impl LdapConnectionPool {
         });
 
         // Bind with credentials
-        ldap.simple_bind(self.credentials.username(), self.credentials.password()).await
+        ldap.simple_bind(credentials.username(), credentials.password()).await
             .map_err(|e| anyhow!("Failed to bind to LDAP: {}", e))?
             .success()
             .map_err(|e| anyhow!("LDAP bind failed: {:?}", e))?;
 
-        info!("LDAP bind successful for {}", url);
+        info!("LDAP simple bind successful for {}", url);
 
         Ok(ldap)
     }
