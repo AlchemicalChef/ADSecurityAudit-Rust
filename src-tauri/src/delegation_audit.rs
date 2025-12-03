@@ -49,11 +49,14 @@
 
 use serde::{Deserialize, Serialize};
 
-// Use shared Recommendation from common_types
-use crate::common_types::Recommendation;
+// Use shared types from common_types
+pub use crate::common_types::{AccountType, Recommendation};
 
 /// Type alias for backward compatibility - use Recommendation from common_types
 pub type DelegationRecommendation = Recommendation;
+
+/// Type alias for backward compatibility - use AccountType from common_types
+pub type DelegationAccountType = AccountType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DelegationType {
@@ -74,24 +77,7 @@ impl std::fmt::Display for DelegationType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AccountType {
-    User,
-    Computer,
-    ManagedServiceAccount,
-    GroupManagedServiceAccount,
-}
-
-impl std::fmt::Display for AccountType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AccountType::User => write!(f, "User Account"),
-            AccountType::Computer => write!(f, "Computer Account"),
-            AccountType::ManagedServiceAccount => write!(f, "Managed Service Account"),
-            AccountType::GroupManagedServiceAccount => write!(f, "Group Managed Service Account"),
-        }
-    }
-}
+// Note: AccountType is now imported from common_types and re-exported as DelegationAccountType
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DelegationEntry {

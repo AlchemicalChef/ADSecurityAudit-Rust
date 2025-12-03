@@ -20,8 +20,8 @@
 
 use serde::{Deserialize, Serialize};
 
-// Use shared FindingSeverity from common_types
-use crate::common_types::FindingSeverity;
+// Use shared FindingSeverity and SeverityCounts from common_types
+use crate::common_types::{FindingSeverity, SeverityCounts};
 
 /// Type alias for backward compatibility - use FindingSeverity from common_types
 pub type InfrastructureSeverity = FindingSeverity;
@@ -97,18 +97,10 @@ impl InfrastructureAudit {
         password_policies: Vec<FineGrainedPasswordPolicy>,
         findings: Vec<InfrastructureFinding>,
     ) -> Self {
-        let critical_count = findings.iter()
-            .filter(|f| matches!(f.severity, InfrastructureSeverity::Critical))
-            .count() as u32;
-        let high_count = findings.iter()
-            .filter(|f| matches!(f.severity, InfrastructureSeverity::High))
-            .count() as u32;
-        let medium_count = findings.iter()
-            .filter(|f| matches!(f.severity, InfrastructureSeverity::Medium))
-            .count() as u32;
-        let low_count = findings.iter()
-            .filter(|f| matches!(f.severity, InfrastructureSeverity::Low))
-            .count() as u32;
+        // Calculate severity counts using shared utility
+        let counts = SeverityCounts::from_iter(findings.iter().map(|f| &f.severity));
+        let (critical_count, high_count, medium_count, low_count) =
+            (counts.critical, counts.high, counts.medium, counts.low);
 
         let (overall_risk_score, risk_level) = calculate_infrastructure_risk_score(&findings);
 

@@ -48,34 +48,17 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Well-known privileged group SIDs and their risk levels
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum PrivilegedGroupType {
-    DomainAdmins,
-    EnterpriseAdmins,
-    SchemaAdmins,
-    Administrators,
-    AccountOperators,
-    BackupOperators,
-    ServerOperators,
-    PrintOperators,
-    DnsAdmins,
-    GroupPolicyCreatorOwners,
-    CryptoOperators,
-    RemoteDesktopUsers,
-    HyperVAdministrators,
-    AccessControlAssistanceOperators,
-    Custom(String),
-}
+// Import shared types from common_types
+pub use crate::common_types::{
+    AccountType, PrivilegeLevel, PrivilegedGroupType,
+    PrivilegedGroupDefinition, get_privileged_group_definitions as get_privileged_group_definitions_full,
+    FindingSeverity,
+};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum PrivilegeLevel {
-    Tier0,    // Domain/Forest Admin level - highest risk
-    Tier1,    // Server Admin level
-    Tier2,    // Workstation Admin level
-    Delegated, // Has delegated permissions via ACLs
-    Service,  // Service account with elevated rights
-}
+/// Type alias for backward compatibility - RiskSeverity uses the shared FindingSeverity enum
+///
+/// Note: RiskSeverity::Info is now RiskSeverity::Informational (from FindingSeverity)
+pub type RiskSeverity = FindingSeverity;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrivilegedGroup {
@@ -116,14 +99,7 @@ pub struct PrivilegedAccount {
     pub user_account_control: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum AccountType {
-    User,
-    ServiceAccount,
-    ManagedServiceAccount,
-    GroupManagedServiceAccount,
-    Computer,
-}
+// Note: AccountType, PrivilegeLevel, PrivilegedGroupType are now imported from common_types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrivilegeSource {
@@ -171,14 +147,7 @@ pub enum RiskFactorType {
     NotInProtectedUsers,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RiskSeverity {
-    Critical,
-    High,
-    Medium,
-    Low,
-    Info,
-}
+// RiskSeverity is now a type alias to FindingSeverity defined above
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DelegatedPermission {
@@ -237,24 +206,14 @@ pub struct PrivilegedAccountRecommendation {
     pub remediation_steps: Vec<String>,
 }
 
-/// Get privileged group definitions with risk scoring
+/// Get privileged group definitions with risk scoring (tuple format for backward compatibility)
+///
+/// For the full struct-based definitions with attack paths, use `get_privileged_group_definitions_full()`
 pub fn get_privileged_group_definitions() -> Vec<(PrivilegedGroupType, &'static str, PrivilegeLevel, u32, bool)> {
-    vec![
-        (PrivilegedGroupType::DomainAdmins, "Domain Admins", PrivilegeLevel::Tier0, 100, true),
-        (PrivilegedGroupType::EnterpriseAdmins, "Enterprise Admins", PrivilegeLevel::Tier0, 100, true),
-        (PrivilegedGroupType::SchemaAdmins, "Schema Admins", PrivilegeLevel::Tier0, 100, true),
-        (PrivilegedGroupType::Administrators, "Administrators", PrivilegeLevel::Tier0, 90, true),
-        (PrivilegedGroupType::AccountOperators, "Account Operators", PrivilegeLevel::Tier1, 70, true),
-        (PrivilegedGroupType::BackupOperators, "Backup Operators", PrivilegeLevel::Tier1, 70, true),
-        (PrivilegedGroupType::ServerOperators, "Server Operators", PrivilegeLevel::Tier1, 60, true),
-        (PrivilegedGroupType::PrintOperators, "Print Operators", PrivilegeLevel::Tier1, 50, true),
-        (PrivilegedGroupType::DnsAdmins, "DnsAdmins", PrivilegeLevel::Tier1, 80, false),
-        (PrivilegedGroupType::GroupPolicyCreatorOwners, "Group Policy Creator Owners", PrivilegeLevel::Tier1, 75, true),
-        (PrivilegedGroupType::CryptoOperators, "Cryptographic Operators", PrivilegeLevel::Tier2, 40, false),
-        (PrivilegedGroupType::RemoteDesktopUsers, "Remote Desktop Users", PrivilegeLevel::Tier2, 30, false),
-        (PrivilegedGroupType::HyperVAdministrators, "Hyper-V Administrators", PrivilegeLevel::Tier1, 85, false),
-        (PrivilegedGroupType::AccessControlAssistanceOperators, "Access Control Assistance Operators", PrivilegeLevel::Tier2, 35, false),
-    ]
+    get_privileged_group_definitions_full()
+        .into_iter()
+        .map(|def| (def.group_type, def.name, def.privilege_level, def.risk_score, def.is_builtin))
+        .collect()
 }
 
 /// Calculate risk factors for an account

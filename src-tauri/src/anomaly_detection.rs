@@ -13,20 +13,13 @@ use chrono::{DateTime, Utc, Duration, Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Anomaly severity classification for prioritizing security alerts
+// Use shared FindingSeverity from common_types
+pub use crate::common_types::FindingSeverity;
+
+/// Type alias for backward compatibility - anomaly severity uses the shared FindingSeverity enum
 ///
-/// Determines urgency of response required for detected anomalies
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AnomalySeverity {
-    /// Low severity - informational, routine monitoring
-    Low,
-    /// Medium severity - unusual activity requiring investigation
-    Medium,
-    /// High severity - suspicious activity requiring prompt attention
-    High,
-    /// Critical severity - likely security incident, immediate action required
-    Critical,
-}
+/// Note: AnomalySeverity uses Low, Medium, High, Critical (FindingSeverity also has Informational)
+pub type AnomalySeverity = FindingSeverity;
 
 /// Types of anomalies detected by the behavioral analytics engine
 ///

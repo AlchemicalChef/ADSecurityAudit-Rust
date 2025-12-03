@@ -93,6 +93,21 @@
 
 use serde::{Deserialize, Serialize};
 
+// Import shared Recommendation type from common_types
+pub use crate::common_types::Recommendation;
+
+/// Type alias for backward compatibility - uses shared Recommendation from common_types
+pub type DAEquivalenceRecommendation = Recommendation;
+
+// Re-export security constants from common_types for backward compatibility
+pub use crate::common_types::security_constants::{
+    DANGEROUS_BUILTIN_GROUPS, PRIVILEGED_RIDS, DCSYNC_RIGHTS, LEGITIMATE_PRINCIPALS,
+    KEY_CREDENTIAL_LINK_GUID, SPN_GUID, RBCD_GUID, GP_LINK_GUID, PASSWORD_RESET_GUID,
+    MEMBER_ATTRIBUTE_GUID, CERTIFICATE_ENROLLMENT_GUID, CERTIFICATE_AUTOENROLLMENT_GUID,
+    MANAGE_CA_GUID, CLIENT_AUTHENTICATION_EKU, SMART_CARD_LOGON_EKU, ANY_PURPOSE_EKU,
+    CERTIFICATE_REQUEST_AGENT_EKU, CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT, CT_FLAG_PEND_ALL_REQUESTS,
+};
+
 // ==========================================
 // Domain Admin Equivalence Audit Types
 // ==========================================
@@ -395,14 +410,7 @@ pub struct DAEquivalenceFinding {
     pub evidence: Vec<EquivalenceEvidence>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DAEquivalenceRecommendation {
-    pub priority: u8,
-    pub title: String,
-    pub description: String,
-    pub steps: Vec<String>,
-    pub reference: Option<String>,
-}
+// DAEquivalenceRecommendation is now a type alias to Recommendation defined at the top of this file
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DAEquivalenceAudit {
@@ -483,62 +491,8 @@ pub struct DAEquivalenceAudit {
     pub recommendations: Vec<DAEquivalenceRecommendation>,
 }
 
-// ==========================================
-// Well-Known Dangerous Groups
-// ==========================================
-
-pub const DANGEROUS_BUILTIN_GROUPS: [(&str, &str); 5] = [
-    ("Print Operators", "Load printer drivers on DCs -> Execute code as SYSTEM"),
-    ("Server Operators", "Modify services on DCs -> Execute code as SYSTEM"),
-    ("Backup Operators", "Backup SAM/SYSTEM -> Extract credentials -> Full domain compromise"),
-    ("Account Operators", "Modify non-protected accounts -> Add to privileged groups"),
-    ("DnsAdmins", "Load arbitrary DLL in DNS service on DC -> Execute as SYSTEM"),
-];
-
-// Well-known privileged RIDs
-pub const PRIVILEGED_RIDS: [&str; 3] = ["500", "512", "519"];
-
-// DCSync required rights GUIDs
-pub const DCSYNC_RIGHTS: [(&str, &str); 3] = [
-    ("DS-Replication-Get-Changes", "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"),
-    ("DS-Replication-Get-Changes-All", "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"),
-    ("DS-Replication-Get-Changes-In-Filtered-Set", "89e95b76-444d-4c62-991a-0facbeda640c"),
-];
-
-// Legitimate principals that normally have broad control
-pub const LEGITIMATE_PRINCIPALS: [&str; 9] = [
-    "NT AUTHORITY\\SYSTEM",
-    "BUILTIN\\Administrators",
-    "Domain Admins",
-    "Enterprise Admins",
-    "Schema Admins",
-    "Domain Controllers",
-    "Enterprise Domain Controllers",
-    "Read-only Domain Controllers",
-    "Administrators",
-];
-
-pub const KEY_CREDENTIAL_LINK_GUID: &str = "5b47d60f-6090-40b2-9f37-2a4de88f3063";
-pub const SPN_GUID: &str = "f3a64788-5306-11d1-a9c5-0000f80367c1";
-pub const RBCD_GUID: &str = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79";
-pub const GP_LINK_GUID: &str = "f30e3bc2-9ff0-11d1-b603-0000f80367c1";
-pub const PASSWORD_RESET_GUID: &str = "00299570-246d-11d0-a768-00aa006e0529";
-pub const MEMBER_ATTRIBUTE_GUID: &str = "bf9679c0-0de6-11d0-a285-00aa003049e2";
-
-// PKI/ADCS Extended Rights GUIDs
-pub const CERTIFICATE_ENROLLMENT_GUID: &str = "0e10c968-78fb-11d2-90d4-00c04f79dc55";
-pub const CERTIFICATE_AUTOENROLLMENT_GUID: &str = "a05b8cc2-17bc-4802-a710-e7c15ab866a2";
-pub const MANAGE_CA_GUID: &str = "ee98ee94-de5f-4f4e-8e89-0adf6c2acc8c";
-
-// PKI EKUs (Extended Key Usage)
-pub const CLIENT_AUTHENTICATION_EKU: &str = "1.3.6.1.5.5.7.3.2";
-pub const SMART_CARD_LOGON_EKU: &str = "1.3.6.1.4.1.311.20.2.2";
-pub const ANY_PURPOSE_EKU: &str = "2.5.29.37.0";
-pub const CERTIFICATE_REQUEST_AGENT_EKU: &str = "1.3.6.1.4.1.311.20.2.1";
-
-// Certificate Template Flags
-pub const CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT: u32 = 0x00000001;
-pub const CT_FLAG_PEND_ALL_REQUESTS: u32 = 0x00000002;
+// Note: Security constants are now imported from common_types::security_constants
+// and re-exported above for backward compatibility
 
 impl DAEquivalenceAudit {
     pub fn new() -> Self {
@@ -1679,6 +1633,7 @@ impl DAEquivalenceAudit {
                     "Enable inheritance: Use AD Users and Computers -> Security -> Advanced -> Enable inheritance".to_string(),
                     "Verify permissions are correct after clearing".to_string(),
                 ],
+                command: None,
                 reference: Some("https://learn.microsoft.com/en-us/troubleshoot/windows-server/identity/adminsdholder-protected-accounts-and-groups".to_string()),
             });
         }
@@ -1698,6 +1653,7 @@ impl DAEquivalenceAudit {
                     "Remove write permissions from unauthorized principals".to_string(),
                     "Monitor for re-creation using advanced threat detection".to_string(),
                 ],
+                command: None,
                 reference: Some("https://posts.specterops.io/shadow-credentials-abusing-key-credential-link-translation-to-en-9d8f9fb12be8".to_string()),
             });
         }
@@ -1716,6 +1672,7 @@ impl DAEquivalenceAudit {
                     "Clear immediately: Set-ADUser -Identity <user> -Clear sIDHistory".to_string(),
                     "Enable SID filtering on all trusts to prevent future attacks".to_string(),
                 ],
+                command: None,
                 reference: Some("https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-sidhistory".to_string()),
             });
         }
@@ -1734,6 +1691,7 @@ impl DAEquivalenceAudit {
                     "Remove unauthorized ACEs from the domain root".to_string(),
                     "Monitor Event ID 4662 for replication attempts".to_string(),
                 ],
+                command: None,
                 reference: Some("https://adsecurity.org/?p=1729".to_string()),
             });
         }
@@ -1752,6 +1710,7 @@ impl DAEquivalenceAudit {
                     "Disable templates that allow SAN specification without manager approval".to_string(),
                     "Use Certify or Certipy to identify ESC1-ESC8 vulnerabilities".to_string(),
                 ],
+                command: None,
                 reference: Some("https://posts.specterops.io/certified-pre-owned-d95910965cd2".to_string()),
             });
         }
@@ -1770,6 +1729,7 @@ impl DAEquivalenceAudit {
                     "Consider constrained delegation or RBCD instead".to_string(),
                     "Enable Protected Users group for sensitive accounts".to_string(),
                 ],
+                command: None,
                 reference: Some("https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview".to_string()),
             });
         }
@@ -1788,6 +1748,7 @@ impl DAEquivalenceAudit {
                     "Monitor for RBCD configuration changes".to_string(),
                     "Clear existing unauthorized RBCD entries".to_string(),
                 ],
+                command: None,
                 reference: Some("https://www.thehacker.recipes/ad/movement/kerberos/delegations/rbcd".to_string()),
             });
         }
@@ -1806,6 +1767,7 @@ impl DAEquivalenceAudit {
                     "Remove WriteGPLink from non-admin accounts".to_string(),
                     "Audit linked GPOs on Domain and DC containers".to_string(),
                 ],
+                command: None,
                 reference: Some("https://learn.microsoft.com/en-us/troubleshoot/windows-server/group-policy/gp-permission-model".to_string()),
             });
         }
@@ -1824,6 +1786,7 @@ impl DAEquivalenceAudit {
                     "Remove WriteMember/AddMember rights on privileged groups".to_string(),
                     "Use AdminSDHolder protection appropriately".to_string(),
                 ],
+                command: None,
                 reference: Some("https://adsecurity.org/?p=3164".to_string()),
             });
         }
@@ -1842,6 +1805,7 @@ impl DAEquivalenceAudit {
                     "Use delegated administration groups with limited scope instead".to_string(),
                     "Document any required membership with business justification".to_string(),
                 ],
+                command: None,
                 reference: Some("https://aka.ms/PrivilegedGroups".to_string()),
             });
         }
@@ -1860,6 +1824,7 @@ impl DAEquivalenceAudit {
                     "Consider Split Permissions model".to_string(),
                     "Monitor for NTLM relay attacks".to_string(),
                 ],
+                command: None,
                 reference: Some("https://dirkjanm.io/abusing-exchange-one-api-call-away-from-domain-admin/".to_string()),
             });
         }
@@ -1878,6 +1843,7 @@ impl DAEquivalenceAudit {
                     "Disable WPAD if not required".to_string(),
                     "Monitor DNS record changes".to_string(),
                 ],
+                command: None,
                 reference: Some("https://dirkjanm.io/krbrelayx-unconstrained-delegation-abuse-toolkit/".to_string()),
             });
         }

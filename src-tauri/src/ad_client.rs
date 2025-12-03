@@ -51,8 +51,9 @@ use crate::gpo_audit::{
 // **NEW IMPORTS FROM UPDATES**
 use crate::delegation_audit::{
     DelegationAudit, DelegationEntry, DelegationType,
-    AccountType as DelegationAccountType,
 };
+// AccountType is now unified in common_types - use directly
+use crate::common_types::AccountType as DelegationAccountType;
 
 use crate::domain_trust_audit::{
     DomainTrustAudit, DomainTrust, TrustDirection, TrustType,
@@ -74,7 +75,7 @@ use crate::da_equivalence::{
 
 use crate::ldap_utils::escape_ldap_filter;
 use crate::ldap_helpers::SearchEntryExt;
-use crate::common_types::extract_domain_from_dn;
+use crate::common_types::{extract_domain_from_dn, SeverityCounts};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1615,12 +1616,10 @@ impl ActiveDirectoryClient {
         findings.extend(evaluate_azure_sso_accounts(&azure_sso_accounts));
         findings.extend(evaluate_recycle_bin(recycle_bin_enabled));
 
-        // Calculate severity counts
-        let critical_count = findings.iter().filter(|f| matches!(f.severity, Severity::Critical)).count() as u32;
-        let high_count = findings.iter().filter(|f| matches!(f.severity, Severity::High)).count() as u32;
-        let medium_count = findings.iter().filter(|f| matches!(f.severity, Severity::Medium)).count() as u32;
-        let low_count = findings.iter().filter(|f| matches!(f.severity, Severity::Low)).count() as u32;
-        let total_findings = findings.len() as u32;
+        // Calculate severity counts using shared utility
+        let counts = SeverityCounts::from_iter(findings.iter().map(|f| &f.severity));
+        let (critical_count, high_count, medium_count, low_count, total_findings) =
+            (counts.critical, counts.high, counts.medium, counts.low, counts.total);
 
         let (overall_risk_score, risk_level) = calculate_risk_score(&findings);
         info!("audit_domain_security: Complete - {} findings (critical={}, high={}, medium={}, low={})",
@@ -1754,11 +1753,10 @@ impl ActiveDirectoryClient {
         let findings = run_gpo_audit(&gpos, &sysvol_permissions, &sysvol_path);
         let summary = calculate_gpo_summary(&gpos, &findings);
 
-        let critical_count = findings.iter().filter(|f| matches!(f.severity, Severity::Critical)).count() as u32;
-        let high_count = findings.iter().filter(|f| matches!(f.severity, Severity::High)).count() as u32;
-        let medium_count = findings.iter().filter(|f| matches!(f.severity, Severity::Medium)).count() as u32;
-        let low_count = findings.iter().filter(|f| matches!(f.severity, Severity::Low)).count() as u32;
-        let total_findings = findings.len() as u32;
+        // Calculate severity counts using shared utility
+        let counts = SeverityCounts::from_iter(findings.iter().map(|f| &f.severity));
+        let (critical_count, high_count, medium_count, low_count, total_findings) =
+            (counts.critical, counts.high, counts.medium, counts.low, counts.total);
 
         let (overall_risk_score, risk_level) = calculate_risk_score(&findings);
 
