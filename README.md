@@ -25,30 +25,69 @@ A comprehensive Active Directory security auditing platform built with Rust and 
 
 ### Attack Detection
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ATTACK DETECTION COVERAGE                     │
-├─────────────────────────────────────────────────────────────────┤
-│ Credential Theft        │ Privilege Escalation                  │
-│ ├─ DCSync Rights        │ ├─ WriteSPN (Kerberoasting)           │
-│ ├─ LAPS Password Exposure│ ├─ Shadow Credentials                │
-│ ├─ gMSA Credential Access│ ├─ RBCD Write Access                 │
-│ └─ AS-REP Roasting      │ └─ Group Membership Control           │
-│                         │                                       │
-│ Persistence             │ Lateral Movement                      │
-│ ├─ Ghost Accounts       │ ├─ Unconstrained Delegation           │
-│ ├─ SID History Abuse    │ ├─ Constrained to DCs                 │
-│ └─ DCShadow Indicators  │ └─ Computer Object Control            │
-│                         │                                       │
-│ ADCS Attacks            │ Infrastructure                        │
-│ ├─ ESC1: Enrollee Subject│ ├─ Weak Kerberos Encryption (RC4)   │
-│ ├─ ESC2: Any Purpose EKU│ ├─ Stale Computer Accounts           │
-│ ├─ ESC3: Enrollment Agent│ ├─ NTLM Relay Exposure              │
-│ ├─ ESC4: Template ACLs  │ ├─ LDAP Signing Not Required         │
-│ ├─ ESC7: CA Management  │ └─ SMB Signing Not Required          │
-│ └─ ESC8: Web Enrollment │                                       │
-└─────────────────────────────────────────────────────────────────┘
-```
+<table>
+<tr>
+<td>
+
+**Credential Theft**
+- DCSync Rights
+- LAPS Password Exposure
+- gMSA Credential Access
+- AS-REP Roasting
+
+</td>
+<td>
+
+**Privilege Escalation**
+- WriteSPN (Kerberoasting)
+- Shadow Credentials
+- RBCD Write Access
+- Group Membership Control
+
+</td>
+</tr>
+<tr>
+<td>
+
+**Persistence**
+- Ghost Accounts
+- SID History Abuse
+- DCShadow Indicators
+
+</td>
+<td>
+
+**Lateral Movement**
+- Unconstrained Delegation
+- Constrained to DCs
+- Computer Object Control
+
+</td>
+</tr>
+<tr>
+<td>
+
+**ADCS Attacks**
+- ESC1: Enrollee Subject
+- ESC2: Any Purpose EKU
+- ESC3: Enrollment Agent
+- ESC4: Template ACLs
+- ESC7: CA Management
+- ESC8: Web Enrollment
+
+</td>
+<td>
+
+**Infrastructure**
+- Weak Kerberos Encryption (RC4)
+- Stale Computer Accounts
+- NTLM Relay Exposure
+- LDAP Signing Not Required
+- SMB Signing Not Required
+
+</td>
+</tr>
+</table>
 
 ### Risk Scoring & Analysis
 
@@ -59,41 +98,41 @@ A comprehensive Active Directory security auditing platform built with Rust and 
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                         FRONTEND (React)                          │
-│  Next.js 15 │ Tailwind CSS │ Recharts │ Dark Theme for SOC       │
-└──────────────────────────────────────────────────────────────────┘
-                                │
-                         Tauri IPC Bridge
-                                │
-┌──────────────────────────────────────────────────────────────────┐
-│                        BACKEND (Rust)                             │
-├──────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐               │
-│  │    Auth     │  │  Connection │  │   Forest    │               │
-│  │   Module    │  │    Pool     │  │   Manager   │               │
-│  │  (GSSAPI)   │  │  (Async)    │  │ (Multi-DC)  │               │
-│  └─────────────┘  └─────────────┘  └─────────────┘               │
-│                                                                   │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                    AUDIT MODULES                             │ │
-│  │  da_equivalence │ delegation │ adcs │ gpo │ permissions     │ │
-│  │  privileged_accounts │ domain_trust │ group │ infrastructure│ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐               │
-│  │   Risk      │  │   Anomaly   │  │   Audit     │               │
-│  │  Scoring    │  │  Detection  │  │   Logger    │               │
-│  └─────────────┘  └─────────────┘  └─────────────┘               │
-└──────────────────────────────────────────────────────────────────┘
-                                │
-                    LDAP/LDAPS + GSSAPI/SSPI
-                                │
-┌──────────────────────────────────────────────────────────────────┐
-│                     ACTIVE DIRECTORY                              │
-│         Domain Controllers │ Global Catalog │ ADCS CAs           │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Frontend["Frontend (React)"]
+        UI[Next.js 15 + Tailwind CSS]
+    end
+
+    subgraph Backend["Backend (Rust)"]
+        Auth[Auth Module<br/>GSSAPI/SSPI]
+        Pool[Connection Pool<br/>Async]
+        Forest[Forest Manager<br/>Multi-DC]
+
+        subgraph Audits["Audit Modules"]
+            DA[da_equivalence]
+            DEL[delegation]
+            ADCS[adcs]
+            GPO[gpo]
+            PERM[permissions]
+            PRIV[privileged_accounts]
+            TRUST[domain_trust]
+            INFRA[infrastructure]
+        end
+
+        Risk[Risk Scoring]
+        Anomaly[Anomaly Detection]
+        AuditLog[Audit Logger]
+    end
+
+    subgraph AD["Active Directory"]
+        DC[Domain Controllers]
+        GC[Global Catalog]
+        CA[ADCS CAs]
+    end
+
+    UI <-->|Tauri IPC| Backend
+    Backend <-->|LDAP/LDAPS + GSSAPI| AD
 ```
 
 ## Installation
@@ -224,15 +263,13 @@ Detects Active Directory Certificate Services misconfigurations.
 
 ### Recommended Service Account Permissions
 
-```
 Minimum permissions for read-only auditing:
-├── Read all user/computer/group objects
-├── Read userAccountControl, servicePrincipalName
-├── Read msDS-KeyCredentialLink
-├── Read nTSecurityDescriptor (for ACL analysis)
-├── Read Certificate Templates (CN=Configuration)
-└── Read GPO objects and SYSVOL
-```
+- Read all user/computer/group objects
+- Read `userAccountControl`, `servicePrincipalName`
+- Read `msDS-KeyCredentialLink`
+- Read `nTSecurityDescriptor` (for ACL analysis)
+- Read Certificate Templates (`CN=Configuration`)
+- Read GPO objects and SYSVOL
 
 ### Environment Variables
 
@@ -247,21 +284,21 @@ AD_MAX_CONNECTIONS=10        # Connection pool size
 
 ### Risk Score Calculation
 
-```
-Domain Risk Score = Σ(Finding Weights)
+**Formula:** `Domain Risk Score = Sum of Finding Weights`
 
-Weights:
-├── Critical: 25-50 points
-├── High: 15-25 points
-├── Medium: 8-15 points
-└── Low: 3-8 points
+| Severity | Points |
+|----------|--------|
+| Critical | 25-50 |
+| High | 15-25 |
+| Medium | 8-15 |
+| Low | 3-8 |
 
-Risk Levels:
-├── 0-20:   Low Risk
-├── 21-40:  Medium Risk
-├── 41-70:  High Risk
-└── 71-100: Critical Risk
-```
+| Score Range | Risk Level |
+|-------------|------------|
+| 0-20 | Low Risk |
+| 21-40 | Medium Risk |
+| 41-70 | High Risk |
+| 71-100 | Critical Risk |
 
 ### Export Formats
 
@@ -311,26 +348,26 @@ All operations logged with:
 
 ```
 ADSecurityAudit-Rust/
-├── src-tauri/src/           # Rust backend
-│   ├── auth.rs              # Authentication (GSSAPI/Simple)
-│   ├── ad_client.rs         # Main AD client (~6000 lines)
-│   ├── da_equivalence.rs    # DA equivalent detection
-│   ├── delegation_audit.rs  # Kerberos delegation
+├── src-tauri/src/              # Rust backend
+│   ├── auth.rs                 # Authentication (GSSAPI/Simple)
+│   ├── ad_client.rs            # Main AD client (~6000 lines)
+│   ├── da_equivalence.rs       # DA equivalent detection
+│   ├── delegation_audit.rs     # Kerberos delegation
 │   ├── infrastructure_audit.rs # NTLM, Kerberos, DCShadow
 │   ├── privileged_accounts.rs  # Tier classification
-│   ├── domain_security.rs   # Password policy, features
-│   ├── domain_trust_audit.rs # Trust analysis
-│   ├── gpo_audit.rs         # GPO security
-│   ├── permissions_audit.rs # ACL analysis
-│   ├── group_audit.rs       # Group membership
-│   ├── risk_scoring.rs      # Risk calculations
-│   ├── anomaly_detection.rs # Behavioral analysis
-│   ├── audit_log.rs         # Compliance logging
-│   ├── connection_pool.rs   # LDAP connection management
-│   └── forest_manager.rs    # Multi-domain support
-├── app/                     # Next.js frontend
-├── components/              # React components
-└── lib/                     # TypeScript utilities
+│   ├── domain_security.rs      # Password policy, features
+│   ├── domain_trust_audit.rs   # Trust analysis
+│   ├── gpo_audit.rs            # GPO security
+│   ├── permissions_audit.rs    # ACL analysis
+│   ├── group_audit.rs          # Group membership
+│   ├── risk_scoring.rs         # Risk calculations
+│   ├── anomaly_detection.rs    # Behavioral analysis
+│   ├── audit_log.rs            # Compliance logging
+│   ├── connection_pool.rs      # LDAP connection management
+│   └── forest_manager.rs       # Multi-domain support
+├── app/                        # Next.js frontend
+├── components/                 # React components
+└── lib/                        # TypeScript utilities
 ```
 
 ## Contributing
