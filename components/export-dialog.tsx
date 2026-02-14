@@ -1,36 +1,4 @@
-/**
- * Audit Report Export Dialog Component
- *
- * Provides export functionality for security audit results in multiple
- * formats suitable for compliance reporting and documentation.
- *
- * @module components/export-dialog
- *
- * Export Formats:
- * - JSON: Machine-readable, full data fidelity
- * - CSV: Spreadsheet-compatible, flat structure
- * - HTML: Self-contained report with styling
- * - PDF: Print-ready compliance documentation
- *
- * Export Content Options:
- * - Executive Summary: High-level risk overview
- * - Full Audit Report: Complete findings with details
- * - Findings Only: Security issues without context
- * - Recommendations: Remediation guidance
- *
- * Filtering Options:
- * - By severity level (Critical, High, Medium, Low)
- * - By audit category (Privileged Access, Delegation, etc.)
- * - By date range
- * - By affected object type
- *
- * Report Sections:
- * - Domain information and scan metadata
- * - Risk score summary
- * - Categorized findings with evidence
- * - Remediation recommendations
- * - Appendix with raw data
- */
+/** Export Dialog -- exports audit results to PDF, CSV, or JSON with metadata and filtering. */
 'use client'
 
 import { useState } from 'react'
@@ -41,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Download, FileText, FileJson, Table, Loader2 } from 'lucide-react'
-import { ExportFormat, ExportColumn, exportData } from '@/lib/export-utils'
+import { exportData, type ExportFormat, type ExportColumn } from '@/lib/export-utils'
 
 // Re-export for convenience
 export type { ExportColumn, ExportFormat }
@@ -49,7 +17,7 @@ export type { ExportColumn, ExportFormat }
 interface ExportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  data: any[]
+  data: Record<string, unknown>[] | object[]
   columns: ExportColumn[]
   title: string
   defaultFilename: string
@@ -104,7 +72,7 @@ export function ExportDialog({
 
       onOpenChange(false)
     } catch (error) {
-      console.error('Export failed:', error)
+      // Export failure; UI resets via finally block
     } finally {
       setIsExporting(false)
     }
@@ -185,9 +153,13 @@ export function ExportDialog({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Estimated size:</span>
               <span className="font-medium">
-                {format === 'pdf' ? `${Math.round(data.length * 0.5)}KB` :
-                 format === 'csv' ? `${Math.round(data.length * 0.3)}KB` :
-                 `${Math.round(data.length * 0.8)}KB`}
+{(() => {
+                  const jsonSize = JSON.stringify(data).length
+                  const sizeKB = format === 'csv' ? Math.round(jsonSize * 0.4 / 1024)
+                    : format === 'pdf' ? Math.round(jsonSize * 0.6 / 1024)
+                    : Math.round(jsonSize / 1024)
+                  return sizeKB < 1 ? '< 1 KB' : `~${sizeKB} KB`
+                })()}
               </span>
             </div>
             <div className="flex justify-between mt-1">

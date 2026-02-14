@@ -4,8 +4,6 @@
 //! equivalent privileges through indirect attack paths, misconfigurations, or
 //! overlooked permissions.
 //!
-// Allow unused code - these are security reference constants for future features
-#![allow(dead_code)]
 //!
 //! # What is Domain Admin Equivalence?
 //!
@@ -94,13 +92,14 @@
 use serde::{Deserialize, Serialize};
 
 // Import shared Recommendation type from common_types
-pub use crate::common_types::Recommendation;
+pub(crate) use crate::common_types::Recommendation;
 
 /// Type alias for backward compatibility - uses shared Recommendation from common_types
-pub type DAEquivalenceRecommendation = Recommendation;
+pub(crate) type DAEquivalenceRecommendation = Recommendation;
 
 // Re-export security constants from common_types for backward compatibility
-pub use crate::common_types::security_constants::{
+#[allow(unused_imports)]
+pub(crate) use crate::common_types::security_constants::{
     DANGEROUS_BUILTIN_GROUPS, PRIVILEGED_RIDS, DCSYNC_RIGHTS, LEGITIMATE_PRINCIPALS,
     KEY_CREDENTIAL_LINK_GUID, SPN_GUID, RBCD_GUID, GP_LINK_GUID, PASSWORD_RESET_GUID,
     MEMBER_ATTRIBUTE_GUID, CERTIFICATE_ENROLLMENT_GUID, CERTIFICATE_AUTOENROLLMENT_GUID,
@@ -113,7 +112,7 @@ pub use crate::common_types::security_constants::{
 // ==========================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EquivalenceEvidence {
+pub(crate) struct EquivalenceEvidence {
     pub reason: String,
     pub target: String,
     pub attack_path: Option<String>,
@@ -123,7 +122,7 @@ pub struct EquivalenceEvidence {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EquivalentPrincipal {
+pub(crate) struct EquivalentPrincipal {
     pub principal: String,
     pub evidence: Vec<EquivalenceEvidence>,
     pub is_critical: bool,
@@ -131,7 +130,7 @@ pub struct EquivalentPrincipal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GhostAccount {
+pub(crate) struct GhostAccount {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub admin_count: i32,
@@ -139,7 +138,7 @@ pub struct GhostAccount {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShadowCredential {
+pub(crate) struct ShadowCredential {
     pub object_name: String,
     pub distinguished_name: String,
     pub object_class: String,
@@ -147,7 +146,7 @@ pub struct ShadowCredential {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShadowCredentialWriteAccess {
+pub(crate) struct ShadowCredentialWriteAccess {
     pub principal: String,
     pub target_name: String,
     pub target_dn: String,
@@ -156,7 +155,7 @@ pub struct ShadowCredentialWriteAccess {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WriteSPNVulnerability {
+pub(crate) struct WriteSPNVulnerability {
     pub principal: String,
     pub target_account: String,
     pub target_dn: String,
@@ -164,7 +163,7 @@ pub struct WriteSPNVulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnconstrainedDelegation {
+pub(crate) struct UnconstrainedDelegation {
     pub account_name: String,
     pub distinguished_name: String,
     pub account_type: String, // "Computer" or "User"
@@ -174,7 +173,7 @@ pub struct UnconstrainedDelegation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RBCDWriteAccess {
+pub(crate) struct RBCDWriteAccess {
     pub principal: String,
     pub target_name: String,
     pub target_dn: String,
@@ -182,7 +181,7 @@ pub struct RBCDWriteAccess {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DNSZoneControl {
+pub(crate) struct DNSZoneControl {
     pub principal: String,
     pub zone_name: String,
     pub zone_dn: String,
@@ -190,7 +189,7 @@ pub struct DNSZoneControl {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GPOLinkRights {
+pub(crate) struct GPOLinkRights {
     pub principal: String,
     pub target: String,
     pub target_dn: String,
@@ -198,14 +197,14 @@ pub struct GPOLinkRights {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExchangePrivExchange {
+pub(crate) struct ExchangePrivExchange {
     pub principal: String,
     pub group_name: String,
     pub has_writedacl: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivilegedAccountTakeover {
+pub(crate) struct PrivilegedAccountTakeover {
     pub principal: String,
     pub target_account: String,
     pub target_dn: String,
@@ -214,7 +213,7 @@ pub struct PrivilegedAccountTakeover {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroupMembershipControl {
+pub(crate) struct GroupMembershipControl {
     pub principal: String,
     pub group_name: String,
     pub group_dn: String,
@@ -223,7 +222,7 @@ pub struct GroupMembershipControl {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OUControl {
+pub(crate) struct OUControl {
     pub principal: String,
     pub ou_name: String,
     pub ou_dn: String,
@@ -232,7 +231,7 @@ pub struct OUControl {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComputerObjectControl {
+pub(crate) struct ComputerObjectControl {
     pub principal: String,
     pub computer_name: String,
     pub computer_dn: String,
@@ -241,7 +240,7 @@ pub struct ComputerObjectControl {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConstrainedDelegationToDC {
+pub(crate) struct ConstrainedDelegationToDC {
     pub account_name: String,
     pub distinguished_name: String,
     pub delegation_target: String,
@@ -249,7 +248,7 @@ pub struct ConstrainedDelegationToDC {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ESC1Vulnerability {
+pub(crate) struct ESC1Vulnerability {
     pub template_name: String,
     pub template_dn: String,
     pub enrollee_supplies_subject: bool,
@@ -259,7 +258,7 @@ pub struct ESC1Vulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ESC4Vulnerability {
+pub(crate) struct ESC4Vulnerability {
     pub template_name: String,
     pub template_dn: String,
     pub principal: String,
@@ -267,14 +266,14 @@ pub struct ESC4Vulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ESC8Vulnerability {
+pub(crate) struct ESC8Vulnerability {
     pub ca_name: String,
     pub web_enrollment_server: String,
     pub ntlm_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AzureADConnect {
+pub(crate) struct AzureADConnect {
     pub account_name: String,
     pub distinguished_name: String,
     pub is_enabled: bool,
@@ -282,7 +281,7 @@ pub struct AzureADConnect {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ESC2Vulnerability {
+pub(crate) struct ESC2Vulnerability {
     pub template_name: String,
     pub template_dn: String,
     pub has_any_purpose_eku: bool,
@@ -291,7 +290,7 @@ pub struct ESC2Vulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ESC3Vulnerability {
+pub(crate) struct ESC3Vulnerability {
     pub template_name: String,
     pub template_dn: String,
     pub is_enrollment_agent: bool,
@@ -300,7 +299,7 @@ pub struct ESC3Vulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ESC5Vulnerability {
+pub(crate) struct ESC5Vulnerability {
     pub object_name: String,
     pub object_dn: String,
     pub object_type: String, // "CA", "NTAuthCertificates", etc.
@@ -309,7 +308,7 @@ pub struct ESC5Vulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ESC7Vulnerability {
+pub(crate) struct ESC7Vulnerability {
     pub ca_name: String,
     pub ca_dn: String,
     pub principal: String,
@@ -318,7 +317,7 @@ pub struct ESC7Vulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GPOControl {
+pub(crate) struct GPOControl {
     pub principal: String,
     pub gpo_name: String,
     pub gpo_guid: String,
@@ -328,21 +327,21 @@ pub struct GPOControl {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionGroupMembership {
+pub(crate) struct SessionGroupMembership {
     pub principal: String,
     pub group_name: String,
     pub attack_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LegacyLogonScript {
+pub(crate) struct LegacyLogonScript {
     pub account_name: String,
     pub distinguished_name: String,
     pub script_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SidHistoryEntry {
+pub(crate) struct SidHistoryEntry {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub injected_sid: String,
@@ -352,7 +351,7 @@ pub struct SidHistoryEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DangerousGroupMember {
+pub(crate) struct DangerousGroupMember {
     pub group_name: String,
     pub member_sam_account_name: String,
     pub member_dn: String,
@@ -360,14 +359,14 @@ pub struct DangerousGroupMember {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DCSyncRight {
+pub(crate) struct DCSyncRight {
     pub principal: String,
     pub rights: Vec<String>,
     pub has_full_dcsync: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PKIVulnerability {
+pub(crate) struct PKIVulnerability {
     pub target_type: String, // CA, Template, NTAuth
     pub target_name: String,
     pub principal: String,
@@ -376,7 +375,7 @@ pub struct PKIVulnerability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LapsExposure {
+pub(crate) struct LapsExposure {
     pub computer_name: String,
     pub principal: String,
     pub can_read_password: bool,
@@ -384,21 +383,21 @@ pub struct LapsExposure {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GmsaExposure {
+pub(crate) struct GmsaExposure {
     pub gmsa_name: String,
     pub principal: String,
     pub can_read_password: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WeakPasswordConfig {
+pub(crate) struct WeakPasswordConfig {
     pub account: String,
     pub issue: String,
     pub risk: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DAEquivalenceFinding {
+pub(crate) struct DAEquivalenceFinding {
     pub category: String,
     pub issue: String,
     pub severity: String,
@@ -413,7 +412,7 @@ pub struct DAEquivalenceFinding {
 // DAEquivalenceRecommendation is now a type alias to Recommendation defined at the top of this file
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DAEquivalenceAudit {
+pub(crate) struct DAEquivalenceAudit {
     pub total_equivalent_principals: u32,
     pub critical_principals: u32,
     pub ghost_accounts_count: u32,
@@ -495,7 +494,7 @@ pub struct DAEquivalenceAudit {
 // and re-exported above for backward compatibility
 
 impl DAEquivalenceAudit {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             total_equivalent_principals: 0,
             critical_principals: 0,
@@ -573,7 +572,7 @@ impl DAEquivalenceAudit {
         }
     }
 
-    pub fn add_ghost_account(&mut self, account: GhostAccount) {
+    pub(crate) fn add_ghost_account(&mut self, account: GhostAccount) {
         self.ghost_accounts_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -602,7 +601,7 @@ impl DAEquivalenceAudit {
         self.ghost_accounts.push(account);
     }
 
-    pub fn add_shadow_credential(&mut self, cred: ShadowCredential) {
+    pub(crate) fn add_shadow_credential(&mut self, cred: ShadowCredential) {
         self.shadow_credentials_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -631,7 +630,7 @@ impl DAEquivalenceAudit {
         self.shadow_credentials.push(cred);
     }
 
-    pub fn add_shadow_credential_write(&mut self, write_access: ShadowCredentialWriteAccess) {
+    pub(crate) fn add_shadow_credential_write(&mut self, write_access: ShadowCredentialWriteAccess) {
         self.shadow_credential_write_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -660,7 +659,7 @@ impl DAEquivalenceAudit {
         self.shadow_credential_writes.push(write_access);
     }
 
-    pub fn add_write_spn(&mut self, vuln: WriteSPNVulnerability) {
+    pub(crate) fn add_write_spn(&mut self, vuln: WriteSPNVulnerability) {
         self.write_spn_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -689,7 +688,7 @@ impl DAEquivalenceAudit {
         self.write_spn_vulnerabilities.push(vuln);
     }
 
-    pub fn add_unconstrained_delegation(&mut self, delegation: UnconstrainedDelegation) {
+    pub(crate) fn add_unconstrained_delegation(&mut self, delegation: UnconstrainedDelegation) {
         if delegation.is_domain_controller {
             return; // DCs are expected to have unconstrained delegation
         }
@@ -724,7 +723,7 @@ impl DAEquivalenceAudit {
         self.unconstrained_delegations.push(delegation);
     }
 
-    pub fn add_rbcd_write(&mut self, rbcd: RBCDWriteAccess) {
+    pub(crate) fn add_rbcd_write(&mut self, rbcd: RBCDWriteAccess) {
         self.rbcd_write_count += 1;
         let severity = if rbcd.is_domain_controller { "Critical" } else { "High" };
         
@@ -759,7 +758,8 @@ impl DAEquivalenceAudit {
         self.rbcd_write_accesses.push(rbcd);
     }
 
-    pub fn add_dns_zone_control(&mut self, dns: DNSZoneControl) {
+    #[allow(dead_code)]
+    pub(crate) fn add_dns_zone_control(&mut self, dns: DNSZoneControl) {
         self.dns_zone_control_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -788,7 +788,8 @@ impl DAEquivalenceAudit {
         self.dns_zone_controls.push(dns);
     }
 
-    pub fn add_gpo_link_rights(&mut self, gpo_link: GPOLinkRights) {
+    #[allow(dead_code)]
+    pub(crate) fn add_gpo_link_rights(&mut self, gpo_link: GPOLinkRights) {
         self.gpo_link_rights_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -817,7 +818,8 @@ impl DAEquivalenceAudit {
         self.gpo_link_rights_list.push(gpo_link);
     }
 
-    pub fn add_exchange_privexchange(&mut self, exchange: ExchangePrivExchange) {
+    #[allow(dead_code)]
+    pub(crate) fn add_exchange_privexchange(&mut self, exchange: ExchangePrivExchange) {
         self.exchange_privexchange_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -846,7 +848,8 @@ impl DAEquivalenceAudit {
         self.exchange_privexchanges.push(exchange);
     }
 
-    pub fn add_privileged_takeover(&mut self, takeover: PrivilegedAccountTakeover) {
+    #[allow(dead_code)]
+    pub(crate) fn add_privileged_takeover(&mut self, takeover: PrivilegedAccountTakeover) {
         self.privileged_takeover_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -877,7 +880,8 @@ impl DAEquivalenceAudit {
         self.privileged_takeovers.push(takeover);
     }
 
-    pub fn add_group_membership_control(&mut self, control: GroupMembershipControl) {
+    #[allow(dead_code)]
+    pub(crate) fn add_group_membership_control(&mut self, control: GroupMembershipControl) {
         self.group_membership_control_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -906,7 +910,8 @@ impl DAEquivalenceAudit {
         self.group_membership_controls.push(control);
     }
 
-    pub fn add_ou_control(&mut self, ou: OUControl) {
+    #[allow(dead_code)]
+    pub(crate) fn add_ou_control(&mut self, ou: OUControl) {
         self.ou_control_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -935,7 +940,8 @@ impl DAEquivalenceAudit {
         self.ou_controls.push(ou);
     }
 
-    pub fn add_computer_control(&mut self, computer: ComputerObjectControl) {
+    #[allow(dead_code)]
+    pub(crate) fn add_computer_control(&mut self, computer: ComputerObjectControl) {
         self.computer_control_count += 1;
         let severity = if computer.is_domain_controller { "Critical" } else { "High" };
         
@@ -972,7 +978,8 @@ impl DAEquivalenceAudit {
         self.computer_controls.push(computer);
     }
 
-    pub fn add_constrained_delegation_to_dc(&mut self, delegation: ConstrainedDelegationToDC) {
+    #[allow(dead_code)]
+    pub(crate) fn add_constrained_delegation_to_dc(&mut self, delegation: ConstrainedDelegationToDC) {
         self.constrained_delegation_to_dc_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1004,7 +1011,8 @@ impl DAEquivalenceAudit {
         self.constrained_delegation_to_dcs.push(delegation);
     }
 
-    pub fn add_esc1_vulnerability(&mut self, vuln: ESC1Vulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_esc1_vulnerability(&mut self, vuln: ESC1Vulnerability) {
         self.esc1_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1033,7 +1041,8 @@ impl DAEquivalenceAudit {
         self.esc1_vulnerabilities.push(vuln);
     }
 
-    pub fn add_esc4_vulnerability(&mut self, vuln: ESC4Vulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_esc4_vulnerability(&mut self, vuln: ESC4Vulnerability) {
         self.esc4_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1062,7 +1071,8 @@ impl DAEquivalenceAudit {
         self.esc4_vulnerabilities.push(vuln);
     }
 
-    pub fn add_esc8_vulnerability(&mut self, vuln: ESC8Vulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_esc8_vulnerability(&mut self, vuln: ESC8Vulnerability) {
         self.esc8_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1091,7 +1101,8 @@ impl DAEquivalenceAudit {
         self.esc8_vulnerabilities.push(vuln);
     }
 
-    pub fn add_esc2_vulnerability(&mut self, vuln: ESC2Vulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_esc2_vulnerability(&mut self, vuln: ESC2Vulnerability) {
         self.esc2_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1122,7 +1133,8 @@ impl DAEquivalenceAudit {
         self.esc2_vulnerabilities.push(vuln);
     }
 
-    pub fn add_esc3_vulnerability(&mut self, vuln: ESC3Vulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_esc3_vulnerability(&mut self, vuln: ESC3Vulnerability) {
         self.esc3_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1151,7 +1163,8 @@ impl DAEquivalenceAudit {
         self.esc3_vulnerabilities.push(vuln);
     }
 
-    pub fn add_esc5_vulnerability(&mut self, vuln: ESC5Vulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_esc5_vulnerability(&mut self, vuln: ESC5Vulnerability) {
         self.esc5_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1180,7 +1193,8 @@ impl DAEquivalenceAudit {
         self.esc5_vulnerabilities.push(vuln);
     }
 
-    pub fn add_esc7_vulnerability(&mut self, vuln: ESC7Vulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_esc7_vulnerability(&mut self, vuln: ESC7Vulnerability) {
         self.esc7_count += 1;
 
         self.findings.push(DAEquivalenceFinding {
@@ -1209,7 +1223,8 @@ impl DAEquivalenceAudit {
         self.esc7_vulnerabilities.push(vuln);
     }
 
-    pub fn add_azure_ad_connect(&mut self, aad_connect: AzureADConnect) {
+    #[allow(dead_code)]
+    pub(crate) fn add_azure_ad_connect(&mut self, aad_connect: AzureADConnect) {
         self.azure_ad_connect_count += 1;
 
         let severity = if aad_connect.is_enabled { "Critical" } else { "High" };
@@ -1242,7 +1257,8 @@ impl DAEquivalenceAudit {
         self.azure_ad_connects.push(aad_connect);
     }
 
-    pub fn add_gpo_control(&mut self, gpo: GPOControl) {
+    #[allow(dead_code)]
+    pub(crate) fn add_gpo_control(&mut self, gpo: GPOControl) {
         self.gpo_control_count += 1;
         let severity = if gpo.linked_to_privileged_scope { "Critical" } else { "High" };
         
@@ -1274,7 +1290,8 @@ impl DAEquivalenceAudit {
         self.gpo_controls.push(gpo);
     }
 
-    pub fn add_session_group(&mut self, session: SessionGroupMembership) {
+    #[allow(dead_code)]
+    pub(crate) fn add_session_group(&mut self, session: SessionGroupMembership) {
         self.session_group_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -1303,7 +1320,8 @@ impl DAEquivalenceAudit {
         self.session_group_memberships.push(session);
     }
 
-    pub fn add_legacy_logon_script(&mut self, script: LegacyLogonScript) {
+    #[allow(dead_code)]
+    pub(crate) fn add_legacy_logon_script(&mut self, script: LegacyLogonScript) {
         self.legacy_logon_script_count += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Legacy Attack Vector".to_string(),
@@ -1332,7 +1350,8 @@ impl DAEquivalenceAudit {
         self.legacy_logon_scripts.push(script);
     }
 
-    pub fn add_sid_history_entry(&mut self, entry: SidHistoryEntry) {
+    #[allow(dead_code)]
+    pub(crate) fn add_sid_history_entry(&mut self, entry: SidHistoryEntry) {
         self.sid_history_issues += 1;
         
         let (severity, severity_level, issue) = if entry.is_same_domain {
@@ -1384,7 +1403,7 @@ impl DAEquivalenceAudit {
         self.sid_history_entries.push(entry);
     }
 
-    pub fn add_dcsync_right(&mut self, right: DCSyncRight) {
+    pub(crate) fn add_dcsync_right(&mut self, right: DCSyncRight) {
         if right.has_full_dcsync {
             self.dcsync_principals += 1;
             self.findings.push(DAEquivalenceFinding {
@@ -1415,7 +1434,8 @@ impl DAEquivalenceAudit {
         self.dcsync_rights.push(right);
     }
 
-    pub fn add_pki_vulnerability(&mut self, vuln: PKIVulnerability) {
+    #[allow(dead_code)]
+    pub(crate) fn add_pki_vulnerability(&mut self, vuln: PKIVulnerability) {
         self.pki_vulnerabilities += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -1444,7 +1464,7 @@ impl DAEquivalenceAudit {
         self.pki_vulnerabilities_list.push(vuln);
     }
 
-    pub fn add_laps_exposure(&mut self, exposure: LapsExposure) {
+    pub(crate) fn add_laps_exposure(&mut self, exposure: LapsExposure) {
         self.laps_exposures += 1;
         let issue = if exposure.can_read_password {
             "LAPS Password Read Access"
@@ -1485,7 +1505,7 @@ impl DAEquivalenceAudit {
         self.laps_exposures_list.push(exposure);
     }
 
-    pub fn add_gmsa_exposure(&mut self, exposure: GmsaExposure) {
+    pub(crate) fn add_gmsa_exposure(&mut self, exposure: GmsaExposure) {
         self.gmsa_exposures += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -1514,7 +1534,7 @@ impl DAEquivalenceAudit {
         self.gmsa_exposures_list.push(exposure);
     }
 
-    pub fn add_dangerous_group_member(&mut self, member: DangerousGroupMember) {
+    pub(crate) fn add_dangerous_group_member(&mut self, member: DangerousGroupMember) {
         self.dangerous_group_members += 1;
         self.findings.push(DAEquivalenceFinding {
             category: "Admin Equivalence".to_string(),
@@ -1543,7 +1563,7 @@ impl DAEquivalenceAudit {
         self.dangerous_members.push(member);
     }
 
-    pub fn add_weak_password_config(&mut self, config: WeakPasswordConfig) {
+    pub(crate) fn add_weak_password_config(&mut self, config: WeakPasswordConfig) {
         self.weak_password_configs += 1;
         let severity = match config.issue.as_str() {
             "Password Not Required" => ("Critical", 4u8),
@@ -1583,7 +1603,7 @@ impl DAEquivalenceAudit {
         self.weak_passwords.push(config);
     }
 
-    pub fn calculate_risk_score(&mut self) {
+    pub(crate) fn calculate_risk_score(&mut self) {
         let mut score = 0u32;
 
         // Weight by finding severity
@@ -1618,7 +1638,7 @@ impl DAEquivalenceAudit {
             .count() as u32;
     }
 
-    pub fn generate_recommendations(&mut self) {
+    pub(crate) fn generate_recommendations(&mut self) {
         if self.ghost_accounts_count > 0 {
             self.recommendations.push(DAEquivalenceRecommendation {
                 priority: 1,

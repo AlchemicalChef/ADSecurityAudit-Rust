@@ -1,36 +1,4 @@
-/**
- * Performance Monitor Component
- *
- * Displays real-time performance metrics for audit operations including
- * query execution times, throughput, and resource utilization.
- *
- * @module components/performance-monitor
- *
- * Metrics Tracked:
- * - Query execution time (min, max, average)
- * - Operations per second throughput
- * - Active connection count
- * - Memory usage
- * - CPU utilization
- *
- * Operation Statistics:
- * - Total operations executed
- * - Successful vs failed ratio
- * - Parallel efficiency score
- * - Queue depth
- *
- * Performance Alerts:
- * - Slow query warnings (>5 seconds)
- * - Connection pool exhaustion
- * - Memory pressure indicators
- * - Timeout occurrences
- *
- * Optimization Recommendations:
- * - Query batching suggestions
- * - Parallelization opportunities
- * - Cache effectiveness analysis
- * - Connection pool tuning
- */
+/** Performance Monitor -- real-time connection pool, cache, and parallel execution metrics. */
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
@@ -84,7 +52,7 @@ export function PerformanceMonitor({ isConnected }: PerformanceMonitorProps) {
       setStats(data)
       setLastRefresh(new Date())
     } catch (error) {
-      console.error("Failed to fetch performance stats:", error)
+      // Stats fetch failure; loading state reset in finally block
     } finally {
       setLoading(false)
     }
@@ -111,7 +79,7 @@ export function PerformanceMonitor({ isConnected }: PerformanceMonitorProps) {
       await invalidateCache()
       await fetchStats()
     } catch (error) {
-      console.error("Failed to clear cache:", error)
+      // Cache clear failure is non-critical
     }
   }
 
@@ -123,7 +91,7 @@ export function PerformanceMonitor({ isConnected }: PerformanceMonitorProps) {
       setAuditResult(result)
       await fetchStats()
     } catch (error) {
-      console.error("Failed to run comprehensive audit:", error)
+      // Audit failure; running state reset in finally block
     } finally {
       setAuditRunning(false)
     }

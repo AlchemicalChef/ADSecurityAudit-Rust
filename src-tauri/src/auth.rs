@@ -39,13 +39,13 @@ use anyhow::{anyhow, Result};
 use ldap3::{Ldap, LdapConnAsync, LdapConnSettings};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::secure_types::Credentials;
 
 /// Supported authentication methods
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum AuthMethod {
+pub(crate) enum AuthMethod {
     /// Automatically select best available method
     #[default]
     Auto,
@@ -70,7 +70,7 @@ impl std::fmt::Display for AuthMethod {
 
 /// Result of an authentication attempt
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthResult {
+pub(crate) struct AuthResult {
     /// Whether authentication succeeded
     pub success: bool,
     /// Method that was used
@@ -87,7 +87,8 @@ pub struct AuthResult {
 
 /// Authentication configuration
 #[derive(Debug, Clone)]
-pub struct AuthConfig {
+#[allow(dead_code)]
+pub(crate) struct AuthConfig {
     /// Preferred authentication method
     pub method: AuthMethod,
     /// Server hostname or IP
@@ -116,14 +117,15 @@ impl Default for AuthConfig {
             use_tls: false,
             credentials: None,
             connect_timeout: Duration::from_secs(10),
-            skip_tls_verify: true, // Enterprise environments often use internal CAs
+            skip_tls_verify: false, // Set to true only for enterprise environments with internal CAs
         }
     }
 }
 
+#[allow(dead_code)]
 impl AuthConfig {
     /// Create config for GSSAPI authentication
-    pub fn gssapi(server_fqdn: &str) -> Self {
+    pub(crate) fn gssapi(server_fqdn: &str) -> Self {
         Self {
             method: AuthMethod::Gssapi,
             server: server_fqdn.to_string(),
@@ -136,7 +138,7 @@ impl AuthConfig {
     }
 
     /// Create config for GSSAPI over LDAPS
-    pub fn gssapi_secure(server_fqdn: &str) -> Self {
+    pub(crate) fn gssapi_secure(server_fqdn: &str) -> Self {
         Self {
             method: AuthMethod::Gssapi,
             server: server_fqdn.to_string(),
@@ -149,7 +151,7 @@ impl AuthConfig {
     }
 
     /// Create config for simple bind
-    pub fn simple(server: &str, username: &str, password: &str, use_tls: bool) -> Self {
+    pub(crate) fn simple(server: &str, username: &str, password: &str, use_tls: bool) -> Self {
         Self {
             method: AuthMethod::Simple,
             server: server.to_string(),
@@ -162,7 +164,7 @@ impl AuthConfig {
     }
 
     /// Create config for auto authentication (tries GSSAPI first)
-    pub fn auto(server: &str, username: Option<&str>, password: Option<&str>) -> Self {
+    pub(crate) fn auto(server: &str, username: Option<&str>, password: Option<&str>) -> Self {
         let credentials = match (username, password) {
             (Some(u), Some(p)) => Some(Credentials::new(u.to_string(), p.to_string())),
             _ => None,
@@ -180,7 +182,7 @@ impl AuthConfig {
     }
 
     /// Get the LDAP URL
-    pub fn ldap_url(&self) -> String {
+    pub(crate) fn ldap_url(&self) -> String {
         let scheme = if self.use_tls { "ldaps" } else { "ldap" };
         let server = self.server.trim_start_matches("ldap://").trim_start_matches("ldaps://");
         let server = server.split(':').next().unwrap_or(server);
@@ -188,27 +190,32 @@ impl AuthConfig {
     }
 
     /// Get the server FQDN for Kerberos SPN
-    pub fn get_server_fqdn(&self) -> &str {
+    pub(crate) fn get_server_fqdn(&self) -> &str {
         self.server_fqdn.as_deref().unwrap_or(&self.server)
     }
 }
 
 /// LDAP Authenticator supporting multiple authentication methods
-pub struct Authenticator {
+#[allow(dead_code)]
+pub(crate) struct Authenticator {
     config: AuthConfig,
 }
 
+#[allow(dead_code)]
 impl Authenticator {
     /// Create a new authenticator with the given configuration
-    pub fn new(config: AuthConfig) -> Self {
+    pub(crate) fn new(config: AuthConfig) -> Self {
         Self { config }
     }
 
     /// Connect and authenticate to the LDAP server
-    pub async fn connect_and_bind(&self) -> Result<(Ldap, AuthResult)> {
+    pub(crate) async fn connect_and_bind(&self) -> Result<(Ldap, AuthResult)> {
         match self.config.method {
             AuthMethod::Auto => self.auto_authenticate().await,
+            #[cfg(windows)]
             AuthMethod::Gssapi => self.gssapi_authenticate().await,
+            #[cfg(not(windows))]
+            AuthMethod::Gssapi => Err(anyhow!("GSSAPI authentication is only available on Windows")),
             AuthMethod::Simple => self.simple_authenticate().await,
             AuthMethod::Anonymous => self.anonymous_authenticate().await,
         }
@@ -218,7 +225,8 @@ impl Authenticator {
     async fn auto_authenticate(&self) -> Result<(Ldap, AuthResult)> {
         info!("Auto-selecting authentication method for {}", self.config.server);
 
-        // Try GSSAPI first (best security)
+        // Try GSSAPI first (best security) - only available on Windows
+        #[cfg(windows)]
         match self.gssapi_authenticate().await {
             Ok(result) => {
                 info!("GSSAPI authentication succeeded");
@@ -248,7 +256,11 @@ impl Authenticator {
         ))
     }
 
-    /// GSSAPI/Kerberos authentication using Windows SSPI
+    /// GSSAPI/Kerberos authentication using Windows SSPI.
+    ///
+    /// This method requires the `gssapi` feature of the `ldap3` crate
+    /// and is only available on Windows where SSPI provides Kerberos tickets.
+    #[cfg(windows)]
     async fn gssapi_authenticate(&self) -> Result<(Ldap, AuthResult)> {
         let url = self.config.ldap_url();
         let server_fqdn = self.config.get_server_fqdn();
@@ -422,21 +434,29 @@ impl Authenticator {
         std::env::var("USER").ok()
     }
 
-    /// Test if GSSAPI authentication is available
+    /// Test if GSSAPI authentication is available.
     ///
     /// This attempts to authenticate using GSSAPI and returns true if successful.
     /// Useful for checking if the current Windows user has a valid Kerberos ticket.
-    pub async fn test_gssapi_available(&self) -> bool {
-        // Try to authenticate with GSSAPI - this will succeed if:
-        // 1. We're on a domain-joined Windows machine
-        // 2. The user has a valid Kerberos TGT
-        // 3. The target server is reachable
-        self.gssapi_authenticate().await.is_ok()
+    /// Always returns `false` on non-Windows platforms.
+    pub(crate) async fn test_gssapi_available(&self) -> bool {
+        #[cfg(windows)]
+        {
+            // Try to authenticate with GSSAPI - this will succeed if:
+            // 1. We're on a domain-joined Windows machine
+            // 2. The user has a valid Kerberos TGT
+            // 3. The target server is reachable
+            self.gssapi_authenticate().await.is_ok()
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
     }
 
     /// Get information about the current authentication context
     #[cfg(windows)]
-    pub fn get_auth_context_info() -> AuthContextInfo {
+    pub(crate) fn get_auth_context_info() -> AuthContextInfo {
         use std::env;
 
         AuthContextInfo {
@@ -449,7 +469,7 @@ impl Authenticator {
     }
 
     #[cfg(not(windows))]
-    pub fn get_auth_context_info() -> AuthContextInfo {
+    pub(crate) fn get_auth_context_info() -> AuthContextInfo {
         AuthContextInfo {
             username: std::env::var("USER").ok(),
             domain: None,
@@ -462,7 +482,8 @@ impl Authenticator {
 
 /// Information about the current authentication context
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthContextInfo {
+#[allow(dead_code)]
+pub(crate) struct AuthContextInfo {
     pub username: Option<String>,
     pub domain: Option<String>,
     pub logon_server: Option<String>,
@@ -470,9 +491,10 @@ pub struct AuthContextInfo {
     pub is_domain_joined: bool,
 }
 
+#[allow(dead_code)]
 impl AuthContextInfo {
     /// Get the UPN (User Principal Name) if available
-    pub fn get_upn(&self) -> Option<String> {
+    pub(crate) fn get_upn(&self) -> Option<String> {
         match (&self.username, &self.user_dns_domain) {
             (Some(user), Some(domain)) => Some(format!("{}@{}", user, domain)),
             _ => None,
@@ -480,7 +502,7 @@ impl AuthContextInfo {
     }
 
     /// Get the NETBIOS-style name (DOMAIN\username)
-    pub fn get_netbios_name(&self) -> Option<String> {
+    pub(crate) fn get_netbios_name(&self) -> Option<String> {
         match (&self.username, &self.domain) {
             (Some(user), Some(domain)) => Some(format!("{}\\{}", domain, user)),
             _ => None,
@@ -489,55 +511,57 @@ impl AuthContextInfo {
 }
 
 /// Builder for creating AuthConfig with a fluent API
-pub struct AuthConfigBuilder {
+#[allow(dead_code)]
+pub(crate) struct AuthConfigBuilder {
     config: AuthConfig,
 }
 
+#[allow(dead_code)]
 impl AuthConfigBuilder {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             config: AuthConfig::default(),
         }
     }
 
-    pub fn server(mut self, server: &str) -> Self {
+    pub(crate) fn server(mut self, server: &str) -> Self {
         self.config.server = server.to_string();
         self.config.server_fqdn = Some(server.to_string());
         self
     }
 
-    pub fn method(mut self, method: AuthMethod) -> Self {
+    pub(crate) fn method(mut self, method: AuthMethod) -> Self {
         self.config.method = method;
         self
     }
 
-    pub fn credentials(mut self, username: &str, password: &str) -> Self {
+    pub(crate) fn credentials(mut self, username: &str, password: &str) -> Self {
         self.config.credentials = Some(Credentials::new(username.to_string(), password.to_string()));
         self
     }
 
-    pub fn use_tls(mut self, use_tls: bool) -> Self {
+    pub(crate) fn use_tls(mut self, use_tls: bool) -> Self {
         self.config.use_tls = use_tls;
         self.config.port = if use_tls { 636 } else { 389 };
         self
     }
 
-    pub fn port(mut self, port: u16) -> Self {
+    pub(crate) fn port(mut self, port: u16) -> Self {
         self.config.port = port;
         self
     }
 
-    pub fn timeout(mut self, timeout: Duration) -> Self {
+    pub(crate) fn timeout(mut self, timeout: Duration) -> Self {
         self.config.connect_timeout = timeout;
         self
     }
 
-    pub fn skip_tls_verify(mut self, skip: bool) -> Self {
+    pub(crate) fn skip_tls_verify(mut self, skip: bool) -> Self {
         self.config.skip_tls_verify = skip;
         self
     }
 
-    pub fn build(self) -> AuthConfig {
+    pub(crate) fn build(self) -> AuthConfig {
         self.config
     }
 }

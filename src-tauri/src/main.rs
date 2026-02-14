@@ -1,3 +1,24 @@
+//! AD Security Audit Scanner -- Tauri Application Entry Point
+//!
+//! This binary crate wires together the audit engine, the Tauri IPC layer, and
+//! the frontend. Every `#[tauri::command]` function defined here is callable
+//! from the Next.js / React frontend via `invoke()`.
+//!
+//! # Architecture
+//!
+//! ```text
+//! Frontend (React/Next.js)
+//!   |  invoke("command_name", { args })
+//!   v
+//! main.rs  -- Tauri command handlers (thin wrappers)
+//!   |
+//!   v
+//! ad_client.rs  -- LDAP data collection
+//!   |
+//!   v
+//! audit modules  -- Analysis & findings
+//! ```
+
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -19,6 +40,7 @@ mod parallel_executor;
 mod ldap_utils;
 mod ldap_timeout;
 mod secure_types;
+#[allow(dead_code)]
 mod errors;
 mod database;
 mod forest_manager;
@@ -64,7 +86,7 @@ use serde::{Serialize, Deserialize};
 use tracing::{info, error, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComprehensiveAuditResult {
+pub(crate) struct ComprehensiveAuditResult {
     pub domain_security: Option<DomainSecurityAudit>,
     pub gpo_audit: Option<GpoAudit>,
     pub delegation_audit: Option<DelegationAudit>,
@@ -79,7 +101,7 @@ pub struct ComprehensiveAuditResult {
 
 /// Progress event emitted during audit operations
 #[derive(Debug, Clone, Serialize)]
-pub struct AuditProgressEvent {
+pub(crate) struct AuditProgressEvent {
     pub audit_type: String,
     pub phase: String,
     pub current: usize,
@@ -135,10 +157,15 @@ async fn invalidate_cache(
 async fn run_comprehensive_audit(
     state: State<'_, Arc<AppState>>,
 ) -> Result<ComprehensiveAuditResult, String> {
-    let ad_client = state.ad_client.read().await;
-    let client = ad_client
-        .as_ref()
-        .ok_or_else(|| "Not connected to Active Directory".to_string())?;
+    // Clone the client reference and release the lock immediately
+    // so that disconnect/reconnect operations aren't blocked during audits
+    let client = {
+        let ad_client = state.ad_client.read().await;
+        ad_client
+            .as_ref()
+            .ok_or_else(|| "Not connected to Active Directory".to_string())?
+            .clone()
+    };
 
     // Run all audits in parallel using tokio::join!
     let (
@@ -1750,9 +1777,9 @@ fn main() {
     tracing::info!("Log file: {}", log_dir.join("AD.log").display());
     tracing::info!("=======================================================");
 
-    // Keep the guard alive for the entire program
-    // We'll leak it intentionally since the app runs until exit
-    std::mem::forget(_guard);
+    // Keep the guard alive for the entire program using a static leak.
+    // This is intentional - the tracing guard must outlive the app.
+    let _guard = Box::leak(Box::new(_guard));
 
     // Initialize database
     let database = Arc::new(Database::new(None).expect("Failed to initialize database"));

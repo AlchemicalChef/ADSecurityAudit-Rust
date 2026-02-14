@@ -30,11 +30,11 @@ use serde::{Deserialize, Serialize};
 use crate::common_types::{FindingSeverity, SeverityCounts};
 
 /// Type alias for backward compatibility - use FindingSeverity from common_types
-pub type InfrastructureSeverity = FindingSeverity;
+pub(crate) type InfrastructureSeverity = FindingSeverity;
 
 /// Infrastructure security finding
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InfrastructureFinding {
+pub(crate) struct InfrastructureFinding {
     pub id: String,
     pub category: String,
     pub issue: String,
@@ -48,7 +48,7 @@ pub struct InfrastructureFinding {
 }
 
 impl InfrastructureFinding {
-    pub fn new(
+    pub(crate) fn new(
         category: &str,
         issue: &str,
         severity: InfrastructureSeverity,
@@ -76,7 +76,7 @@ impl InfrastructureFinding {
 
 /// Complete infrastructure security audit result
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InfrastructureAudit {
+pub(crate) struct InfrastructureAudit {
     pub ldap_security: LdapSecurityStatus,
     pub print_spooler_exposure: Vec<PrintSpoolerExposure>,
     pub auth_silos: AuthSiloStatus,
@@ -95,7 +95,7 @@ pub struct InfrastructureAudit {
 
 impl InfrastructureAudit {
     /// Create a new InfrastructureAudit with counts calculated from findings
-    pub fn new(
+    pub(crate) fn new(
         ldap_security: LdapSecurityStatus,
         print_spooler_exposure: Vec<PrintSpoolerExposure>,
         auth_silos: AuthSiloStatus,
@@ -152,7 +152,7 @@ impl Default for InfrastructureAudit {
 
 /// LDAP security configuration status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LdapSecurityStatus {
+pub(crate) struct LdapSecurityStatus {
     /// Whether LDAP signing is required (from GPO/registry)
     pub signing_required: Option<bool>,
     /// Whether LDAP channel binding is required
@@ -179,7 +179,7 @@ impl Default for LdapSecurityStatus {
 
 /// Print Spooler service exposure on a Domain Controller
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrintSpoolerExposure {
+pub(crate) struct PrintSpoolerExposure {
     /// Domain Controller name
     pub dc_name: String,
     /// Distinguished name of the DC computer object
@@ -196,7 +196,7 @@ pub struct PrintSpoolerExposure {
 
 /// Authentication Silo configuration status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthSiloStatus {
+pub(crate) struct AuthSiloStatus {
     /// Number of authentication silos configured
     pub silos_configured: usize,
     /// List of configured silos with details
@@ -220,7 +220,7 @@ impl Default for AuthSiloStatus {
 
 /// Individual authentication silo configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthenticationSilo {
+pub(crate) struct AuthenticationSilo {
     pub name: String,
     pub distinguished_name: String,
     pub description: Option<String>,
@@ -236,7 +236,7 @@ pub struct AuthenticationSilo {
 
 /// Tier 0 account not protected by authentication silo
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnprotectedTier0Account {
+pub(crate) struct UnprotectedTier0Account {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub is_domain_admin: bool,
@@ -246,7 +246,7 @@ pub struct UnprotectedTier0Account {
 
 /// Pre-Windows 2000 Compatible Access group status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PreWindows2000Status {
+pub(crate) struct PreWindows2000Status {
     /// Whether the group exists and has members
     pub group_exists: bool,
     /// Whether the group contains dangerous members like Everyone or Anonymous
@@ -276,7 +276,7 @@ impl Default for PreWindows2000Status {
 
 /// Fine-Grained Password Policy (Password Settings Object)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FineGrainedPasswordPolicy {
+pub(crate) struct FineGrainedPasswordPolicy {
     pub name: String,
     pub distinguished_name: String,
     /// Lower precedence = higher priority
@@ -307,7 +307,8 @@ pub struct FineGrainedPasswordPolicy {
 /// Kerberos encryption configuration for an account
 /// Detects weak RC4 encryption that is vulnerable to offline cracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KerberosEncryptionStatus {
+#[allow(dead_code)]
+pub(crate) struct KerberosEncryptionStatus {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub account_type: String,
@@ -336,7 +337,8 @@ impl KerberosEncryptionStatus {
     /// - 0x4: RC4-HMAC-MD5 (weak, vulnerable to offline cracking)
     /// - 0x8: AES128-CTS-HMAC-SHA1-96 (strong)
     /// - 0x10: AES256-CTS-HMAC-SHA1-96 (strongest)
-    pub fn from_encryption_types(
+    #[allow(dead_code)]
+    pub(crate) fn from_encryption_types(
         sam_account_name: &str,
         distinguished_name: &str,
         account_type: &str,
@@ -373,7 +375,8 @@ impl KerberosEncryptionStatus {
 
 /// Summary of Kerberos encryption audit findings
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KerberosEncryptionAudit {
+#[allow(dead_code)]
+pub(crate) struct KerberosEncryptionAudit {
     /// Total accounts with explicit encryption settings
     pub total_accounts_audited: u32,
     /// Accounts with RC4 enabled (any AES also enabled)
@@ -404,7 +407,8 @@ impl Default for KerberosEncryptionAudit {
 /// Stale computer account with old password
 /// Computers should rotate passwords every 30 days by default
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StaleComputerAccount {
+#[allow(dead_code)]
+pub(crate) struct StaleComputerAccount {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub dns_hostname: Option<String>,
@@ -427,7 +431,8 @@ pub struct StaleComputerAccount {
 
 /// Summary of stale computer account audit
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StaleComputerAudit {
+#[allow(dead_code)]
+pub(crate) struct StaleComputerAudit {
     /// Total computer accounts scanned
     pub total_computers: u32,
     /// Computers with password age > 60 days
@@ -463,7 +468,8 @@ impl Default for StaleComputerAudit {
 /// DCShadow attack involves registering SPNs that make a computer appear
 /// to be a Domain Controller, allowing rogue replication
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DCShadowIndicator {
+#[allow(dead_code)]
+pub(crate) struct DCShadowIndicator {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub dns_hostname: Option<String>,
@@ -485,7 +491,8 @@ pub struct DCShadowIndicator {
 
 /// Types of DCShadow indicators
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DCShadowIndicatorType {
+#[allow(dead_code)]
+pub(crate) enum DCShadowIndicatorType {
     /// GC/ SPN - Global Catalog service, should only be on DCs
     GlobalCatalog,
     /// E3514235-4B06-11D1-AB04-00C04FC2DCD2/ - Directory Replication SPN
@@ -512,7 +519,8 @@ impl std::fmt::Display for DCShadowIndicatorType {
 
 /// Summary of DCShadow detection audit
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DCShadowAudit {
+#[allow(dead_code)]
+pub(crate) struct DCShadowAudit {
     /// Total non-DC computers with suspicious SPNs
     pub suspicious_computers_count: u32,
     /// Computers with GC/ SPN but not actual DCs (CRITICAL)
@@ -543,7 +551,8 @@ impl Default for DCShadowAudit {
 
 /// NTLM and network protocol security audit results
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NtlmSecurityAudit {
+#[allow(dead_code)]
+pub(crate) struct NtlmSecurityAudit {
     /// LDAP signing configuration
     pub ldap_signing: LdapSigningStatus,
     /// SMB signing configuration
@@ -573,7 +582,8 @@ impl Default for NtlmSecurityAudit {
 
 /// LDAP signing configuration status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LdapSigningStatus {
+#[allow(dead_code)]
+pub(crate) struct LdapSigningStatus {
     /// Whether LDAP signing is required (2), negotiated (1), or none (0)
     pub server_signing_requirement: Option<u32>,
     /// Human-readable signing status
@@ -606,7 +616,8 @@ impl Default for LdapSigningStatus {
 
 impl LdapSigningStatus {
     /// Interpret the LDAPServerIntegrity registry value
-    pub fn interpret_signing_level(level: u32) -> &'static str {
+    #[allow(dead_code)]
+    pub(crate) fn interpret_signing_level(level: u32) -> &'static str {
         match level {
             0 => "None - No signing required (INSECURE)",
             1 => "Negotiated - Signing if client supports (WEAK)",
@@ -616,7 +627,8 @@ impl LdapSigningStatus {
     }
 
     /// Interpret channel binding level
-    pub fn interpret_channel_binding(level: u32) -> &'static str {
+    #[allow(dead_code)]
+    pub(crate) fn interpret_channel_binding(level: u32) -> &'static str {
         match level {
             0 => "Never - Channel binding disabled (INSECURE)",
             1 => "When Supported - Binding if client supports (WEAK)",
@@ -628,7 +640,8 @@ impl LdapSigningStatus {
 
 /// SMB signing configuration status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SmbSigningStatus {
+#[allow(dead_code)]
+pub(crate) struct SmbSigningStatus {
     /// Whether SMB signing is required on domain controllers
     pub dc_signing_required: Option<bool>,
     /// Whether SMB signing is required on member servers
@@ -664,7 +677,8 @@ impl Default for SmbSigningStatus {
 
 /// NTLM restriction and LmCompatibilityLevel status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NtlmRestrictionStatus {
+#[allow(dead_code)]
+pub(crate) struct NtlmRestrictionStatus {
     /// LmCompatibilityLevel value (0-5)
     pub lm_compatibility_level: Option<u32>,
     /// Human-readable interpretation
@@ -709,7 +723,8 @@ impl NtlmRestrictionStatus {
     /// | 3 | NTLMv2 only | LM, NTLM, NTLMv2 |
     /// | 4 | NTLMv2 only | NTLM, NTLMv2 (refuse LM) |
     /// | 5 | NTLMv2 only | NTLMv2 only (refuse LM & NTLM) |
-    pub fn interpret_lm_level(level: u32) -> (&'static str, bool) {
+    #[allow(dead_code)]
+    pub(crate) fn interpret_lm_level(level: u32) -> (&'static str, bool) {
         match level {
             0 => ("Send LM & NTLM responses (CRITICAL - LM hashes sent)", false),
             1 => ("Send LM & NTLM, use NTLMv2 session security if negotiated (HIGH RISK)", false),
@@ -722,7 +737,8 @@ impl NtlmRestrictionStatus {
     }
 
     /// Create from detected LmCompatibilityLevel
-    pub fn from_level(level: u32) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_level(level: u32) -> Self {
         let (description, is_secure) = Self::interpret_lm_level(level);
         let ntlmv1_allowed = level < 4;
 
@@ -754,7 +770,8 @@ impl NtlmRestrictionStatus {
 
 /// Security setting extracted from GPO
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GpoSecuritySetting {
+#[allow(dead_code)]
+pub(crate) struct GpoSecuritySetting {
     /// GPO name or GUID
     pub gpo_name: String,
     /// GPO distinguished name
@@ -773,7 +790,8 @@ pub struct GpoSecuritySetting {
 
 /// Domain controller with NTLM security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DcNtlmStatus {
+#[allow(dead_code)]
+pub(crate) struct DcNtlmStatus {
     pub dc_name: String,
     pub distinguished_name: String,
     pub dns_hostname: Option<String>,
@@ -787,7 +805,8 @@ pub struct DcNtlmStatus {
 
 /// Extended infrastructure audit including Phase 1 + Phase 2 gap analysis checks
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExtendedInfrastructureAudit {
+#[allow(dead_code)]
+pub(crate) struct ExtendedInfrastructureAudit {
     /// Base infrastructure audit results
     #[serde(flatten)]
     pub base_audit: InfrastructureAudit,
@@ -802,7 +821,8 @@ pub struct ExtendedInfrastructureAudit {
 }
 
 impl ExtendedInfrastructureAudit {
-    pub fn new(
+    #[allow(dead_code)]
+    pub(crate) fn new(
         base_audit: InfrastructureAudit,
         kerberos_encryption: KerberosEncryptionAudit,
         stale_computers: StaleComputerAudit,
@@ -821,7 +841,8 @@ impl ExtendedInfrastructureAudit {
 
 /// Infrastructure security recommendation
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InfrastructureRecommendation {
+#[allow(dead_code)]
+pub(crate) struct InfrastructureRecommendation {
     pub priority: InfrastructureSeverity,
     pub category: String,
     pub title: String,
@@ -832,7 +853,8 @@ pub struct InfrastructureRecommendation {
 }
 
 /// Generate recommendations based on infrastructure audit results
-pub fn generate_infrastructure_recommendations(
+#[allow(dead_code)]
+pub(crate) fn generate_infrastructure_recommendations(
     audit: &InfrastructureAudit,
 ) -> Vec<InfrastructureRecommendation> {
     let mut recommendations = Vec::new();
@@ -947,7 +969,7 @@ pub fn generate_infrastructure_recommendations(
 
 /// Calculate overall risk score from infrastructure findings
 /// Uses diminishing returns (sqrt scaling) to prevent score saturation
-pub fn calculate_infrastructure_risk_score(findings: &[InfrastructureFinding]) -> (u32, String) {
+pub(crate) fn calculate_infrastructure_risk_score(findings: &[InfrastructureFinding]) -> (u32, String) {
     if findings.is_empty() {
         return (0, "Low".to_string());
     }

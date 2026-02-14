@@ -1,34 +1,4 @@
-/**
- * Application Settings Dialog Component
- *
- * Provides configuration options for the AD Security Scanner including
- * connection settings, audit parameters, and user preferences.
- *
- * @module components/settings-dialog
- *
- * Settings Categories:
- * - Connection: Default timeout, retry settings, TLS options
- * - Auditing: Scan depth, concurrent queries, cache TTL
- * - Display: Theme, notification preferences, dashboard layout
- * - Export: Default formats, output paths, report templates
- *
- * Security Settings:
- * - Credential storage options (session vs persistent)
- * - LDAPS enforcement
- * - Certificate validation mode
- * - Audit log retention period
- *
- * Performance Settings:
- * - Query batch size
- * - Cache duration
- * - Parallel operation limits
- * - Progress update frequency
- *
- * Persistence:
- * - Settings stored in encrypted SQLite database
- * - Per-domain configuration support
- * - Import/export capability
- */
+/** Settings Dialog -- application configuration for connection, security, display, and export preferences. */
 "use client"
 
 import { useState } from "react"
@@ -200,7 +170,7 @@ export function SettingsDialog({ onOpenConnectionDialog }: SettingsDialogProps) 
                     </div>
                     <div className="space-y-2 ml-6">
                       <Label>Theme</Label>
-                      <Select value={theme} onValueChange={(v: any) => setTheme(v)}>
+                      <Select value={theme} onValueChange={(v: string) => setTheme(v as "light" | "dark" | "system")}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>

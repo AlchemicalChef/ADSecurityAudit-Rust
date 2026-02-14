@@ -7,7 +7,7 @@ use crate::domain_security::{Severity, SecurityFinding, FindingCategory};
 
 /// GPO permission level
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum GpoPermission {
+pub(crate) enum GpoPermission {
     GpoApply,
     GpoRead,
     GpoEdit,
@@ -16,7 +16,8 @@ pub enum GpoPermission {
 }
 
 impl GpoPermission {
-    pub fn from_str(s: &str) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "gpoapply" => GpoPermission::GpoApply,
             "gporead" => GpoPermission::GpoRead,
@@ -26,14 +27,14 @@ impl GpoPermission {
         }
     }
 
-    pub fn is_dangerous(&self) -> bool {
+    pub(crate) fn is_dangerous(&self) -> bool {
         matches!(
             self,
             GpoPermission::GpoEdit | GpoPermission::GpoEditDeleteModifySecurity
         )
     }
 
-    pub fn display_name(&self) -> &str {
+    pub(crate) fn display_name(&self) -> &str {
         match self {
             GpoPermission::GpoApply => "Apply",
             GpoPermission::GpoRead => "Read",
@@ -46,7 +47,7 @@ impl GpoPermission {
 
 /// GPO permission entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GpoPermissionEntry {
+pub(crate) struct GpoPermissionEntry {
     pub trustee: String,
     pub trustee_type: String, // User, Group, Computer
     pub permission: GpoPermission,
@@ -56,7 +57,7 @@ pub struct GpoPermissionEntry {
 
 /// GPO link information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GpoLink {
+pub(crate) struct GpoLink {
     pub ou_name: String,
     pub ou_distinguished_name: String,
     pub link_enabled: bool,
@@ -66,7 +67,7 @@ pub struct GpoLink {
 
 /// Group Policy Object information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroupPolicyObject {
+pub(crate) struct GroupPolicyObject {
     pub id: String,
     pub display_name: String,
     pub path: String,
@@ -82,7 +83,7 @@ pub struct GroupPolicyObject {
 
 /// SYSVOL permission entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SysvolPermission {
+pub(crate) struct SysvolPermission {
     pub identity: String,
     pub access_type: String, // Allow, Deny
     pub rights: String,
@@ -92,7 +93,7 @@ pub struct SysvolPermission {
 
 /// GPO audit summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GpoAuditSummary {
+pub(crate) struct GpoAuditSummary {
     pub total_gpos: u32,
     pub gpos_with_dangerous_permissions: u32,
     pub gpos_linked_to_dc_ou: u32,
@@ -103,7 +104,7 @@ pub struct GpoAuditSummary {
 
 /// Complete GPO audit result
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GpoAudit {
+pub(crate) struct GpoAudit {
     pub domain_name: String,
     pub sysvol_path: String,
     pub gpos: Vec<GroupPolicyObject>,
@@ -121,7 +122,7 @@ pub struct GpoAudit {
 }
 
 /// Protected/privileged groups that are allowed to have GPO edit rights
-pub const PRIVILEGED_TRUSTEES: &[&str] = &[
+pub(crate) const PRIVILEGED_TRUSTEES: &[&str] = &[
     "Domain Admins",
     "Enterprise Admins",
     "SYSTEM",
@@ -132,7 +133,7 @@ pub const PRIVILEGED_TRUSTEES: &[&str] = &[
 ];
 
 /// Check if trustee is privileged
-pub fn is_privileged_trustee(trustee: &str) -> bool {
+pub(crate) fn is_privileged_trustee(trustee: &str) -> bool {
     PRIVILEGED_TRUSTEES.iter().any(|p| {
         trustee.eq_ignore_ascii_case(p) || 
         trustee.to_lowercase().contains(&p.to_lowercase())
@@ -140,7 +141,7 @@ pub fn is_privileged_trustee(trustee: &str) -> bool {
 }
 
 /// Evaluate GPO permissions for security issues
-pub fn evaluate_gpo_permissions(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_gpo_permissions(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     for perm in &gpo.permissions {
@@ -177,7 +178,7 @@ pub fn evaluate_gpo_permissions(gpo: &GroupPolicyObject) -> Vec<SecurityFinding>
 }
 
 /// Evaluate GPO links to sensitive OUs (like Domain Controllers)
-pub fn evaluate_gpo_dc_links(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_gpo_dc_links(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     for link in &gpo.links {
@@ -218,7 +219,7 @@ pub fn evaluate_gpo_dc_links(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
 }
 
 /// Check for unlinked GPOs
-pub fn evaluate_unlinked_gpos(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_unlinked_gpos(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     if gpo.links.is_empty() {
@@ -242,7 +243,7 @@ pub fn evaluate_unlinked_gpos(gpo: &GroupPolicyObject) -> Vec<SecurityFinding> {
 }
 
 /// Evaluate SYSVOL permissions
-pub fn evaluate_sysvol_permissions(permissions: &[SysvolPermission], sysvol_path: &str) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_sysvol_permissions(permissions: &[SysvolPermission], sysvol_path: &str) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     // Dangerous identities that should not have write access
@@ -289,7 +290,7 @@ pub fn evaluate_sysvol_permissions(permissions: &[SysvolPermission], sysvol_path
 }
 
 /// Run full GPO audit
-pub fn run_gpo_audit(gpos: &[GroupPolicyObject], sysvol_permissions: &[SysvolPermission], sysvol_path: &str) -> Vec<SecurityFinding> {
+pub(crate) fn run_gpo_audit(gpos: &[GroupPolicyObject], sysvol_permissions: &[SysvolPermission], sysvol_path: &str) -> Vec<SecurityFinding> {
     let mut all_findings = Vec::new();
 
     for gpo in gpos {
@@ -304,7 +305,7 @@ pub fn run_gpo_audit(gpos: &[GroupPolicyObject], sysvol_permissions: &[SysvolPer
 }
 
 /// Calculate GPO audit summary
-pub fn calculate_gpo_summary(gpos: &[GroupPolicyObject], findings: &[SecurityFinding]) -> GpoAuditSummary {
+pub(crate) fn calculate_gpo_summary(gpos: &[GroupPolicyObject], findings: &[SecurityFinding]) -> GpoAuditSummary {
     let gpos_with_dangerous_permissions = gpos.iter()
         .filter(|g| g.permissions.iter().any(|p| p.permission.is_dangerous() && !is_privileged_trustee(&p.trustee)))
         .count() as u32;

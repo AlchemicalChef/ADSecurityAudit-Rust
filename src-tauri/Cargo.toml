@@ -22,7 +22,7 @@ serde_json = "1"
 tokio = { version = "1", features = ["full", "sync", "time", "rt-multi-thread"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
-ldap3 = { version = "0.11.5", features = ["gssapi"] }
+ldap3 = { version = "0.11.5" }
 async-std = "1"
 anyhow = "1"
 tracing = "0.1"
@@ -58,6 +58,10 @@ windows = { version = "0.58", features = [
     "Win32_Security_Authentication_Identity",
     "Win32_Foundation",
 ] }
+
+[target.'cfg(windows)'.dependencies.ldap3]
+version = "0.11.5"
+features = ["gssapi"]  # GSSAPI/Kerberos support for Windows integrated auth
 
 [features]
 default = ["custom-protocol"]

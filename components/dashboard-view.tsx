@@ -1,30 +1,4 @@
-/**
- * Dashboard View Component
- *
- * Main security dashboard providing an executive overview of Active Directory
- * security posture. Aggregates data from multiple audit sources to display:
- *
- * - Critical security findings count and severity breakdown
- * - Tier 0 privileged account statistics
- * - KRBTGT password age and rotation status
- * - ADCS (AD Certificate Services) vulnerability summary
- * - Risk scoring trends and recommendations
- *
- * @module components/dashboard-view
- *
- * Features:
- * - Real-time audit progress tracking with visual feedback
- * - Drill-down dialogs for detailed findings
- * - Interactive charts (bar and pie) for data visualization
- * - Auto-refresh capability for continuous monitoring
- *
- * Data Sources:
- * - DA Equivalence Audit (shadow admin detection)
- * - Privileged Accounts Summary
- * - KRBTGT Analysis
- * - AdminSDHolder Analysis
- * - GPO Security Audit
- */
+/** Security Dashboard -- executive overview of AD security posture with drill-down details and charts. */
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
@@ -160,7 +134,7 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
         }))
       })
     } catch (e) {
-      console.error("Failed to set up progress listener:", e)
+      // Progress listener is optional; audits proceed without it
     }
 
     // Load data sequentially with progress updates
@@ -180,7 +154,6 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
       setLoadingProgress(prev => ({ ...prev, krbtgt: 'completed' }))
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.error("KRBTGT audit failed:", errMsg)
       errors.push(`KRBTGT: ${errMsg}`)
       setLoadingProgress(prev => ({
         ...prev,
@@ -196,7 +169,6 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
       setLoadingProgress(prev => ({ ...prev, adminSDHolder: 'completed' }))
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.error("AdminSDHolder audit failed:", errMsg)
       errors.push(`AdminSDHolder: ${errMsg}`)
       setLoadingProgress(prev => ({
         ...prev,
@@ -212,7 +184,6 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
       setLoadingProgress(prev => ({ ...prev, privilegedGroups: 'completed' }))
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.error("Privileged Groups audit failed:", errMsg)
       errors.push(`Privileged Groups: ${errMsg}`)
       setLoadingProgress(prev => ({
         ...prev,
@@ -228,7 +199,6 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
       setLoadingProgress(prev => ({ ...prev, gpo: 'completed' }))
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.error("GPO audit failed:", errMsg)
       errors.push(`GPO: ${errMsg}`)
       setLoadingProgress(prev => ({
         ...prev,
@@ -244,7 +214,6 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
       setLoadingProgress(prev => ({ ...prev, privilegedAccounts: 'completed' }))
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.error("Privileged Accounts audit failed:", errMsg)
       errors.push(`Privileged Accounts: ${errMsg}`)
       setLoadingProgress(prev => ({
         ...prev,
@@ -260,7 +229,6 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
       setLoadingProgress(prev => ({ ...prev, daEquivalence: 'completed' }))
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.error("DA Equivalence audit failed:", errMsg)
       errors.push(`DA Equivalence: ${errMsg}`)
       setLoadingProgress(prev => ({
         ...prev,
@@ -782,7 +750,7 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
                 <div className="flex-1">
                   <p className="text-sm font-medium text-orange-400">Excessive Tier 0 Accounts</p>
                   <p className="text-xs text-muted-foreground">
-                    {data.privilegedAccounts.total_tier0_accounts} Tier 0 accounts detected (recommended: ≤5). Reduce
+                    {data.privilegedAccounts?.total_tier0_accounts} Tier 0 accounts detected (recommended: ≤5). Reduce
                     permanent admin access and implement JIT privileges.
                   </p>
                 </div>
@@ -907,11 +875,11 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
                   </div>
                 </div>
 
-                {data.daEquivalence?.findings.filter((f) => f.severity === "Critical").length > 0 && (
+                {(data.daEquivalence?.findings.filter((f) => f.severity === "Critical").length ?? 0) > 0 && (
                   <div className="space-y-2">
                     <h4 className="font-semibold text-foreground">Critical DA Equivalence Findings</h4>
                     <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {data.daEquivalence.findings
+                      {data.daEquivalence?.findings
                         .filter((f) => f.severity === "Critical")
                         .slice(0, 5)
                         .map((finding, idx) => (
@@ -919,23 +887,23 @@ export function DashboardView({ isConnected }: DashboardViewProps) {
                             <div className="flex items-start gap-2">
                               <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5" />
                               <div className="flex-1">
-                                <p className="text-sm font-medium text-foreground">{finding.title}</p>
+                                <p className="text-sm font-medium text-foreground">{finding.issue}</p>
                                 <p className="text-xs text-muted-foreground mt-1">{finding.description}</p>
                                 <div className="flex items-center gap-2 mt-2">
                                   <Badge variant="outline" className="text-xs">
                                     {finding.category}
                                   </Badge>
                                   <span className="text-xs text-muted-foreground">
-                                    {finding.affected_objects?.length || 0} affected
+                                    {finding.affected_object || "N/A"}
                                   </span>
                                 </div>
                               </div>
                             </div>
                           </div>
                         ))}
-                      {data.daEquivalence.findings.filter((f) => f.severity === "Critical").length > 5 && (
+                      {(data.daEquivalence?.findings.filter((f) => f.severity === "Critical").length ?? 0) > 5 && (
                         <p className="text-xs text-center text-muted-foreground py-2">
-                          +{data.daEquivalence.findings.filter((f) => f.severity === "Critical").length - 5} more findings
+                          +{(data.daEquivalence?.findings.filter((f) => f.severity === "Critical").length ?? 0) - 5} more findings
                         </p>
                       )}
                     </div>

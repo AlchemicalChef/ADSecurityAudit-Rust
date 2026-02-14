@@ -6,7 +6,7 @@ use rusqlite::{Connection, params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tracing::{info, warn, error};
+use tracing::{info, error};
 use chrono::{DateTime, Utc};
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
@@ -18,7 +18,7 @@ use base64::{Engine as _, engine::general_purpose};
 
 /// Domain configuration stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DomainConfig {
+pub(crate) struct DomainConfig {
     pub id: Option<i64>,
     pub name: String,
     pub server: String,
@@ -34,13 +34,13 @@ pub struct DomainConfig {
 }
 
 /// Database manager with connection pooling
-pub struct Database {
+pub(crate) struct Database {
     conn: Arc<Mutex<Connection>>,
 }
 
 impl Database {
     /// Create a new database connection
-    pub fn new(db_path: Option<PathBuf>) -> Result<Self> {
+    pub(crate) fn new(db_path: Option<PathBuf>) -> Result<Self> {
         let path = db_path.unwrap_or_else(|| {
             let mut p = dirs::data_local_dir()
                 .unwrap_or_else(|| PathBuf::from("."));
@@ -109,7 +109,7 @@ impl Database {
     }
 
     /// Save or update domain configuration
-    pub fn save_domain(&self, domain: &DomainConfig) -> Result<i64> {
+    pub(crate) fn save_domain(&self, domain: &DomainConfig) -> Result<i64> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -163,7 +163,7 @@ impl Database {
     }
 
     /// Get domain configuration by ID
-    pub fn get_domain(&self, id: i64) -> Result<Option<DomainConfig>> {
+    pub(crate) fn get_domain(&self, id: i64) -> Result<Option<DomainConfig>> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -199,11 +199,11 @@ impl Database {
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                         .map(|dt| dt.with_timezone(&Utc)),
                     created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                        .unwrap()
-                        .with_timezone(&Utc),
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
                     updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                        .unwrap()
-                        .with_timezone(&Utc),
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
                 })
             },
         ).optional()?;
@@ -212,7 +212,7 @@ impl Database {
     }
 
     /// Get domain configuration by name
-    pub fn get_domain_by_name(&self, name: &str) -> Result<Option<DomainConfig>> {
+    pub(crate) fn get_domain_by_name(&self, name: &str) -> Result<Option<DomainConfig>> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -248,11 +248,11 @@ impl Database {
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                         .map(|dt| dt.with_timezone(&Utc)),
                     created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                        .unwrap()
-                        .with_timezone(&Utc),
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
                     updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                        .unwrap()
-                        .with_timezone(&Utc),
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
                 })
             },
         ).optional()?;
@@ -261,7 +261,7 @@ impl Database {
     }
 
     /// Get all domain configurations
-    pub fn get_all_domains(&self) -> Result<Vec<DomainConfig>> {
+    pub(crate) fn get_all_domains(&self) -> Result<Vec<DomainConfig>> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -299,11 +299,11 @@ impl Database {
                     .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc)),
                 created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                    .unwrap()
-                    .with_timezone(&Utc),
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
                 updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                    .unwrap()
-                    .with_timezone(&Utc),
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
             })
         })?;
 
@@ -316,7 +316,7 @@ impl Database {
     }
 
     /// Get active domain
-    pub fn get_active_domain(&self) -> Result<Option<DomainConfig>> {
+    pub(crate) fn get_active_domain(&self) -> Result<Option<DomainConfig>> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -352,11 +352,11 @@ impl Database {
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                         .map(|dt| dt.with_timezone(&Utc)),
                     created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?)
-                        .unwrap()
-                        .with_timezone(&Utc),
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
                     updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
-                        .unwrap()
-                        .with_timezone(&Utc),
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
                 })
             },
         ).optional()?;
@@ -365,14 +365,17 @@ impl Database {
     }
 
     /// Set active domain (deactivates all others)
-    pub fn set_active_domain(&self, id: i64) -> Result<()> {
+    pub(crate) fn set_active_domain(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
-        // Use a single atomic UPDATE to avoid race conditions
-        // This sets is_active = 1 for the specified domain and 0 for all others
+        // Deactivate currently active domain, then activate the target
         conn.execute(
-            "UPDATE domains SET is_active = CASE WHEN id = ?1 THEN 1 ELSE 0 END",
+            "UPDATE domains SET is_active = 0 WHERE is_active = 1 AND id != ?1",
+            params![id]
+        )?;
+        conn.execute(
+            "UPDATE domains SET is_active = 1 WHERE id = ?1",
             params![id]
         )?;
 
@@ -380,7 +383,7 @@ impl Database {
     }
 
     /// Delete domain configuration
-    pub fn delete_domain(&self, id: i64) -> Result<()> {
+    pub(crate) fn delete_domain(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -390,7 +393,7 @@ impl Database {
     }
 
     /// Clear all domains from the database
-    pub fn clear_all_domains(&self) -> Result<()> {
+    pub(crate) fn clear_all_domains(&self) -> Result<()> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -401,7 +404,7 @@ impl Database {
     }
 
     /// Update last connected timestamp
-    pub fn update_last_connected(&self, id: i64) -> Result<()> {
+    pub(crate) fn update_last_connected(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock()
             .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
 
@@ -415,31 +418,40 @@ impl Database {
         Ok(())
     }
 
-    /// Get machine-specific identifier for key derivation
+    /// Get stable machine-specific identifier for key derivation.
+    ///
+    /// Uses a persistent random key stored in the app's data directory.
+    /// This ensures encrypted passwords remain decryptable even if the
+    /// hostname or OS username changes.
     fn get_machine_identifier(&self) -> Result<String> {
-        // Use a combination of machine-specific data
-        // In production, consider using hardware IDs, MAC addresses, etc.
-        use std::env;
+        let key_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."));
+        let key_path = key_dir.join("IRP").join(".keyid");
 
-        let mut identifier = String::new();
-
-        // Use hostname
-        if let Ok(hostname) = hostname::get() {
-            identifier.push_str(&hostname.to_string_lossy());
+        // Try to read existing key
+        if key_path.exists() {
+            if let Ok(key) = std::fs::read_to_string(&key_path) {
+                let key = key.trim().to_string();
+                if !key.is_empty() {
+                    return Ok(key);
+                }
+            }
         }
 
-        // Use username
-        if let Ok(username) = env::var("USER").or_else(|_| env::var("USERNAME")) {
-            identifier.push_str(&username);
-        }
+        // Generate a new stable key identifier
+        let mut key_bytes = [0u8; 32];
+        OsRng.fill_bytes(&mut key_bytes);
+        let key_id = general_purpose::STANDARD.encode(key_bytes);
 
-        // If we couldn't get any machine-specific data, use a fallback
-        if identifier.is_empty() {
-            warn!("Could not determine machine identifier, using fallback");
-            identifier = "IRP_FALLBACK_IDENTIFIER".to_string();
+        // Ensure directory exists and write key
+        if let Some(parent) = key_path.parent() {
+            std::fs::create_dir_all(parent).ok();
         }
+        std::fs::write(&key_path, &key_id)
+            .map_err(|e| anyhow!("Failed to write key identifier: {}", e))?;
 
-        Ok(identifier)
+        info!("Generated new encryption key identifier");
+        Ok(key_id)
     }
 
     /// Encrypt password using AES-256-GCM with machine-specific key derivation

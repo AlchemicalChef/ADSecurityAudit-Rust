@@ -1,36 +1,4 @@
-/**
- * Security Incident Manager Component
- *
- * Provides incident tracking and workflow management for security events
- * discovered during Active Directory audits.
- *
- * @module components/incident-manager
- *
- * Incident Lifecycle:
- * - Open: Newly created incident awaiting triage
- * - Investigating: Active investigation in progress
- * - Contained: Threat contained, remediation underway
- * - Resolved: Issue resolved, pending verification
- * - Closed: Incident fully remediated and documented
- *
- * Priority Levels:
- * - Critical: Active attack, data breach (immediate response)
- * - High: Significant vulnerability (< 4 hour response)
- * - Medium: Security misconfiguration (< 24 hour response)
- * - Low: Minor finding (< 72 hour response)
- *
- * Features:
- * - Incident creation from audit findings
- * - Action logging and timeline tracking
- * - Assignment and escalation workflows
- * - Filtering and search capabilities
- * - Export for compliance reporting
- *
- * Integration Points:
- * - Auto-created from critical audit findings
- * - Links to affected AD objects
- * - Audit log correlation
- */
+/** Incident Manager -- tracks security incidents with lifecycle management and action logging. */
 "use client"
 
 import type React from "react"
@@ -68,7 +36,7 @@ export function IncidentManager() {
       const data = await getIncidents()
       setIncidents(data)
     } catch (error) {
-      console.error("Failed to load incidents:", error)
+      // Incident loading failure; loading state reset in finally block
     } finally {
       setLoading(false)
     }
@@ -88,16 +56,16 @@ export function IncidentManager() {
       setIsCreateDialogOpen(false)
       loadIncidents()
     } catch (error) {
-      console.error("Failed to create incident:", error)
+      // Incident creation failure; dialog remains open for retry
     }
   }
 
   const handleStatusChange = async (incidentId: string, status: string) => {
     try {
-      await updateIncidentStatus(incidentId, status.toLowerCase())
+      await updateIncidentStatus(incidentId, status)
       loadIncidents()
     } catch (error) {
-      console.error("Failed to update status:", error)
+      // Status update failure; original status remains in UI
     }
   }
 

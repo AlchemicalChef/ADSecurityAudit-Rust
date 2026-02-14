@@ -3,8 +3,6 @@
 //! Comprehensive analysis of privileged accounts in Active Directory environments,
 //! implementing Microsoft's tiered administration model and security best practices.
 //!
-// Allow unused code - delegation analysis types for future features
-#![allow(dead_code)]
 //!
 //! # Microsoft Tier Model
 //!
@@ -49,19 +47,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Import shared types from common_types
-pub use crate::common_types::{
+pub(crate) use crate::common_types::{
     AccountType, PrivilegeLevel, PrivilegedGroupType,
-    PrivilegedGroupDefinition, get_privileged_group_definitions as get_privileged_group_definitions_full,
+    get_privileged_group_definitions as get_privileged_group_definitions_full,
     FindingSeverity,
 };
 
 /// Type alias for backward compatibility - RiskSeverity uses the shared FindingSeverity enum
 ///
 /// Note: RiskSeverity::Info is now RiskSeverity::Informational (from FindingSeverity)
-pub type RiskSeverity = FindingSeverity;
+pub(crate) type RiskSeverity = FindingSeverity;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivilegedGroup {
+pub(crate) struct PrivilegedGroup {
     pub name: String,
     pub distinguished_name: String,
     pub sid: String,
@@ -74,7 +72,7 @@ pub struct PrivilegedGroup {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivilegedAccount {
+pub(crate) struct PrivilegedAccount {
     pub distinguished_name: String,
     pub sam_account_name: String,
     pub display_name: String,
@@ -102,7 +100,7 @@ pub struct PrivilegedAccount {
 // Note: AccountType, PrivilegeLevel, PrivilegedGroupType are now imported from common_types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivilegeSource {
+pub(crate) struct PrivilegeSource {
     pub source_type: PrivilegeSourceType,
     pub source_name: String,
     pub source_dn: Option<String>,
@@ -112,7 +110,7 @@ pub struct PrivilegeSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum PrivilegeSourceType {
+pub(crate) enum PrivilegeSourceType {
     GroupMembership,
     AclPermission,
     DelegatedPermission,
@@ -121,7 +119,7 @@ pub enum PrivilegeSourceType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RiskFactor {
+pub(crate) struct RiskFactor {
     pub factor_type: RiskFactorType,
     pub description: String,
     pub severity: RiskSeverity,
@@ -129,14 +127,14 @@ pub struct RiskFactor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RiskFactorType {
+pub(crate) enum RiskFactorType {
     PasswordNeverExpires,
     StalePassword,
     NoRecentLogon,
     ExcessivePrivileges,
     ServiceAccountAsAdmin,
     NestedPrivileges,
-    UnconstainedDelegation,
+    UnconstrainedDelegation,
     KerberoastableSpn,
     NotProtected,
     PasswordNotRequired,
@@ -150,7 +148,8 @@ pub enum RiskFactorType {
 // RiskSeverity is now a type alias to FindingSeverity defined above
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DelegatedPermission {
+#[allow(dead_code)]
+pub(crate) struct DelegatedPermission {
     pub target_dn: String,
     pub target_type: String,
     pub permissions: Vec<String>,
@@ -159,7 +158,7 @@ pub struct DelegatedPermission {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivilegedAccountSummary {
+pub(crate) struct PrivilegedAccountSummary {
     // Total counts
     pub total_privileged_accounts: usize,
     pub total_tier0_accounts: usize,
@@ -197,7 +196,7 @@ pub struct PrivilegedAccountSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivilegedAccountRecommendation {
+pub(crate) struct PrivilegedAccountRecommendation {
     pub priority: RiskSeverity,
     pub category: String,
     pub title: String,
@@ -209,7 +208,7 @@ pub struct PrivilegedAccountRecommendation {
 /// Get privileged group definitions with risk scoring (tuple format for backward compatibility)
 ///
 /// For the full struct-based definitions with attack paths, use `get_privileged_group_definitions_full()`
-pub fn get_privileged_group_definitions() -> Vec<(PrivilegedGroupType, &'static str, PrivilegeLevel, u32, bool)> {
+pub(crate) fn get_privileged_group_definitions() -> Vec<(PrivilegedGroupType, &'static str, PrivilegeLevel, u32, bool)> {
     get_privileged_group_definitions_full()
         .into_iter()
         .map(|def| (def.group_type, def.name, def.privilege_level, def.risk_score, def.is_builtin))
@@ -217,7 +216,7 @@ pub fn get_privileged_group_definitions() -> Vec<(PrivilegedGroupType, &'static 
 }
 
 /// Calculate risk factors for an account
-pub fn calculate_risk_factors(account: &PrivilegedAccount) -> Vec<RiskFactor> {
+pub(crate) fn calculate_risk_factors(account: &PrivilegedAccount) -> Vec<RiskFactor> {
     let mut factors = Vec::new();
     
     // Password never expires
@@ -310,7 +309,7 @@ pub fn calculate_risk_factors(account: &PrivilegedAccount) -> Vec<RiskFactor> {
 }
 
 /// Calculate overall risk score for summary
-pub fn calculate_overall_risk(summary: &PrivilegedAccountSummary) -> (u32, RiskSeverity) {
+pub(crate) fn calculate_overall_risk(summary: &PrivilegedAccountSummary) -> (u32, RiskSeverity) {
     let mut score = 0u32;
 
     // Base score from account counts
@@ -343,7 +342,7 @@ pub fn calculate_overall_risk(summary: &PrivilegedAccountSummary) -> (u32, RiskS
 }
 
 /// Generate recommendations based on analysis
-pub fn generate_privileged_account_recommendations(
+pub(crate) fn generate_privileged_account_recommendations(
     summary: &PrivilegedAccountSummary,
     accounts: &[PrivilegedAccount],
 ) -> Vec<PrivilegedAccountRecommendation> {

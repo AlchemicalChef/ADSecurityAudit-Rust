@@ -1,34 +1,4 @@
-/**
- * KRBTGT Rotation Countdown Component
- *
- * Visual countdown timer for the wait period between KRBTGT password
- * rotations. Essential for safe KRBTGT rotation workflow.
- *
- * @module components/rotation-countdown
- *
- * Purpose:
- * After the first KRBTGT rotation, existing TGTs remain valid.
- * This countdown ensures adequate wait time before the second
- * rotation to avoid authentication disruptions.
- *
- * Wait Period Recommendations:
- * - Minimum: 10 hours (maximum TGT lifetime)
- * - Recommended: 24 hours (safety margin)
- * - Maximum: 72 hours (extended for large environments)
- *
- * Display States:
- * - Counting: Shows remaining time (hours:minutes:seconds)
- * - Ready: Second rotation can proceed
- * - Complete: Both rotations finished
- *
- * Safety Features:
- * - Cannot proceed until countdown completes
- * - Visual warning during countdown
- * - Persists across browser sessions
- * - Sends notifications when ready
- *
- * @see components/krbtgt-management for full rotation workflow
- */
+/** Rotation Countdown -- visual timer for the wait period between KRBTGT password rotations. */
 'use client'
 
 import { useEffect, useState } from 'react'

@@ -7,8 +7,6 @@
 //! - Statistics tracking
 //! - Multi-domain support
 //!
-// Allow unused code - cache warming/eviction features for future optimization
-#![allow(dead_code)]
 
 use anyhow::Result;
 use chrono::{DateTime, Utc, Duration};
@@ -27,7 +25,8 @@ use tracing::{info, debug, warn};
 /// - Access statistics (count and last access time)
 /// - Size information for memory management
 #[derive(Clone, Debug)]
-pub struct CacheEntry<T> {
+#[allow(dead_code)]
+pub(crate) struct CacheEntry<T> {
     /// The actual data stored in cache (serialized as JSON string)
     pub data: T,
     /// When this entry was first created
@@ -42,6 +41,7 @@ pub struct CacheEntry<T> {
     pub size_bytes: usize,
 }
 
+#[allow(dead_code)]
 impl<T: Clone> CacheEntry<T> {
     /// Creates a new cache entry with the given data and TTL
     ///
@@ -52,7 +52,7 @@ impl<T: Clone> CacheEntry<T> {
     ///
     /// # Returns
     /// A new CacheEntry with expiration set to now + ttl_seconds
-    pub fn new(data: T, ttl_seconds: i64, size_bytes: usize) -> Self {
+    pub(crate) fn new(data: T, ttl_seconds: i64, size_bytes: usize) -> Self {
         let now = Utc::now();
         Self {
             data,
@@ -68,7 +68,7 @@ impl<T: Clone> CacheEntry<T> {
     ///
     /// # Returns
     /// `true` if current time is past the expiration time, `false` otherwise
-    pub fn is_expired(&self) -> bool {
+    pub(crate) fn is_expired(&self) -> bool {
         Utc::now() > self.expires_at
     }
 
@@ -81,7 +81,7 @@ impl<T: Clone> CacheEntry<T> {
     ///
     /// # Returns
     /// A clone of the cached data
-    pub async fn access(&self) -> T {
+    pub(crate) async fn access(&self) -> T {
         // Atomically increment access counter
         self.access_count.fetch_add(1, Ordering::Relaxed);
         // Update last access time (needs write lock)
@@ -105,7 +105,7 @@ impl<T: Clone> CacheEntry<T> {
 /// // This caches privileged accounts specifically for domain 1
 /// ```
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct CacheKey {
+pub(crate) struct CacheKey {
     /// Optional domain ID - None means global/cross-domain cache
     pub domain_id: Option<i64>,
     /// Type of data being cached
@@ -113,7 +113,8 @@ pub struct CacheKey {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub enum CacheKeyType {
+#[allow(dead_code)]
+pub(crate) enum CacheKeyType {
     PrivilegedAccounts,
     DomainSecurity,
     GpoAudit,
@@ -132,7 +133,7 @@ pub enum CacheKeyType {
 /// Cache invalidation strategy (reserved for future use)
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
-pub enum InvalidationStrategy {
+pub(crate) enum InvalidationStrategy {
     /// Invalidate after time-to-live expires
     TTL,
     /// Invalidate on explicit command
@@ -145,7 +146,7 @@ pub enum InvalidationStrategy {
 
 /// Cache statistics
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CacheStatistics {
+pub(crate) struct CacheStatistics {
     pub total_entries: usize,
     pub total_size_bytes: usize,
     pub hit_count: u64,
@@ -157,7 +158,8 @@ pub struct CacheStatistics {
 }
 
 /// Advanced cache manager
-pub struct AdvancedCache {
+#[allow(dead_code)]
+pub(crate) struct AdvancedCache {
     /// Cache storage
     cache: Arc<DashMap<CacheKey, CacheEntry<String>>>,
 
@@ -174,9 +176,10 @@ pub struct AdvancedCache {
     warming_enabled: Arc<RwLock<bool>>,
 }
 
+#[allow(dead_code)]
 impl AdvancedCache {
     /// Create a new advanced cache
-    pub fn new(max_size_bytes: usize, default_ttl_seconds: i64) -> Self {
+    pub(crate) fn new(max_size_bytes: usize, default_ttl_seconds: i64) -> Self {
         info!(
             "Initializing advanced cache (max_size: {} MB, default_ttl: {}s)",
             max_size_bytes / 1024 / 1024,
@@ -216,7 +219,7 @@ impl AdvancedCache {
     /// ```
     /// let user_list: Option<Vec<User>> = cache.get(&key).await;
     /// ```
-    pub async fn get<T>(&self, key: &CacheKey) -> Option<T>
+    pub(crate) async fn get<T>(&self, key: &CacheKey) -> Option<T>
     where
         T: for<'de> Deserialize<'de>,
     {
@@ -286,7 +289,7 @@ impl AdvancedCache {
     /// // Cache with custom TTL of 1 hour
     /// cache.set(key, &user_data, Some(3600)).await?;
     /// ```
-    pub async fn set<T>(&self, key: CacheKey, value: &T, ttl_seconds: Option<i64>) -> Result<()>
+    pub(crate) async fn set<T>(&self, key: CacheKey, value: &T, ttl_seconds: Option<i64>) -> Result<()>
     where
         T: Serialize,
     {
@@ -309,14 +312,14 @@ impl AdvancedCache {
     }
 
     /// Invalidate cache entries by key
-    pub fn invalidate(&self, key: &CacheKey) {
+    pub(crate) fn invalidate(&self, key: &CacheKey) {
         if self.cache.remove(key).is_some() {
             debug!("Invalidated cache entry: {:?}", key);
         }
     }
 
     /// Invalidate all cache entries for a domain
-    pub fn invalidate_domain(&self, domain_id: i64) {
+    pub(crate) fn invalidate_domain(&self, domain_id: i64) {
         let mut removed_count = 0;
         self.cache.retain(|k, _| {
             if k.domain_id == Some(domain_id) {
@@ -330,14 +333,14 @@ impl AdvancedCache {
     }
 
     /// Invalidate all cache entries
-    pub fn invalidate_all(&self) {
+    pub(crate) fn invalidate_all(&self) {
         let count = self.cache.len();
         self.cache.clear();
         info!("Invalidated all {} cache entries", count);
     }
 
     /// Invalidate expired entries
-    pub async fn cleanup_expired(&self) {
+    pub(crate) async fn cleanup_expired(&self) {
         let mut removed_count = 0;
         self.cache.retain(|_, v| {
             if v.is_expired() {
@@ -416,7 +419,7 @@ impl AdvancedCache {
     }
 
     /// Get cache statistics
-    pub async fn get_statistics(&self) -> CacheStatistics {
+    pub(crate) async fn get_statistics(&self) -> CacheStatistics {
         let hits = self.hit_count.load(Ordering::Relaxed);
         let misses = self.miss_count.load(Ordering::Relaxed);
         let total_requests = hits + misses;
@@ -473,19 +476,19 @@ impl AdvancedCache {
     }
 
     /// Enable cache warming
-    pub async fn enable_warming(&self) {
+    pub(crate) async fn enable_warming(&self) {
         *self.warming_enabled.write().await = true;
         info!("Cache warming enabled");
     }
 
     /// Disable cache warming
-    pub async fn disable_warming(&self) {
+    pub(crate) async fn disable_warming(&self) {
         *self.warming_enabled.write().await = false;
         info!("Cache warming disabled");
     }
 
     /// Check if cache warming is enabled
-    pub async fn is_warming_enabled(&self) -> bool {
+    pub(crate) async fn is_warming_enabled(&self) -> bool {
         *self.warming_enabled.read().await
     }
 
@@ -521,7 +524,7 @@ impl AdvancedCache {
     ///     fetch_data_for_key(key).await
     /// }).await?;
     /// ```
-    pub async fn warm_cache<F, Fut, T>(&self, keys: Vec<CacheKey>, fetch_fn: F) -> Result<()>
+    pub(crate) async fn warm_cache<F, Fut, T>(&self, keys: Vec<CacheKey>, fetch_fn: F) -> Result<()>
     where
         F: Fn(CacheKey) -> Fut,
         Fut: std::future::Future<Output = Result<T>>,
@@ -597,7 +600,7 @@ impl AdvancedCache {
     /// // Preload predicted data
     /// cache.warm_cache(predicted_keys, fetch_fn).await?;
     /// ```
-    pub async fn predictive_load(&self) -> Vec<CacheKey> {
+    pub(crate) async fn predictive_load(&self) -> Vec<CacheKey> {
         let mut predictions = Vec::new();
 
         // Step 1: Analyze access patterns to find frequently accessed data
@@ -652,8 +655,9 @@ impl AdvancedCache {
             }
         }
 
-        // Remove duplicates
-        predictions.dedup();
+        // Remove duplicates (dedup only removes consecutive duplicates, so use retain+HashSet)
+        let mut seen = std::collections::HashSet::new();
+        predictions.retain(|p| seen.insert(p.clone()));
         debug!("Predicted {} keys for preloading", predictions.len());
         predictions
     }

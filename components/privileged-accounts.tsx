@@ -1,32 +1,4 @@
-/**
- * Privileged Accounts Management Component
- *
- * Comprehensive analysis and management of privileged accounts implementing
- * Microsoft's tiered administration model for Active Directory security.
- *
- * @module components/privileged-accounts
- *
- * Tier Model Implementation:
- * - Tier 0: Domain/Forest Admin (DA, EA, SA) - Highest security
- * - Tier 1: Server Administration - Server Operators, Backup Operators
- * - Tier 2: Workstation Administration - Local admins, Help Desk
- *
- * Analysis Features:
- * - Member enumeration with nested group resolution
- * - Risk factor identification (stale passwords, SPNs, etc.)
- * - Account status tracking (enabled, locked, disabled)
- * - Last logon and password age monitoring
- * - Kerberoastable SPN detection
- *
- * Security Checks:
- * - Password never expires on privileged accounts
- * - Service accounts with Domain Admin privileges
- * - Disabled accounts still in privileged groups
- * - Accounts not protected by AdminSDHolder
- * - Excessive privilege accumulation
- *
- * @see https://docs.microsoft.com/en-us/security/compass/privileged-access-access-model
- */
+/** Privileged Accounts -- tiered analysis (Tier 0/1/2) of privileged accounts, risk factors, and groups. */
 "use client"
 
 import type React from "react"
@@ -80,6 +52,7 @@ type RiskSeverity = "Critical" | "High" | "Medium" | "Low" | "Info"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ExportDialog, type ExportColumn } from "@/components/export-dialog"
 import { AuditFilters, type FilterDefinition, type ActiveFilter } from "@/components/audit-filters"
+
 
 interface PrivilegedAccountsProps {
   isConnected: boolean
@@ -140,7 +113,7 @@ export function PrivilegedAccounts({ isConnected }: PrivilegedAccountsProps) {
       setAccounts(accountsData)
       setGroups(groupsData)
     } catch (error) {
-      console.error("Failed to load privileged account data:", error)
+      // Data load failure; loading state reset in finally block
     } finally {
       setIsLoading(false)
     }

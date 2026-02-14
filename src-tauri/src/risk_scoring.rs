@@ -6,8 +6,6 @@
 //! - Privilege escalation paths
 //! - Configuration vulnerabilities
 //!
-// Allow unused code - risk visualization methods for future UI features
-#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -21,7 +19,7 @@ use std::collections::HashMap;
 /// - **High**: 60-79 points - Significant security risk
 /// - **Critical**: 80-100 points - Immediate action required
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub enum RiskLevel {
+pub(crate) enum RiskLevel {
     /// Minimal risk (0-39 points)
     Low,
     /// Moderate risk requiring attention (40-59 points)
@@ -46,7 +44,7 @@ impl RiskLevel {
     /// let level = RiskLevel::from_score(85.0);
     /// assert_eq!(level, RiskLevel::Critical);
     /// ```
-    pub fn from_score(score: f64) -> Self {
+    pub(crate) fn from_score(score: f64) -> Self {
         if score >= 80.0 {
             RiskLevel::Critical
         } else if score >= 60.0 {
@@ -62,7 +60,8 @@ impl RiskLevel {
     ///
     /// # Returns
     /// Hex color string for displaying risk level in UI
-    pub fn to_color(&self) -> &str {
+    #[allow(dead_code)]
+    pub(crate) fn to_color(&self) -> &str {
         match self {
             RiskLevel::Low => "#10b981",      // green
             RiskLevel::Medium => "#f59e0b",   // yellow
@@ -77,7 +76,7 @@ impl RiskLevel {
 /// Each risk factor represents a specific security concern with its own
 /// weight, score, supporting evidence, and mitigation strategy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RiskFactor {
+pub(crate) struct RiskFactor {
     /// Human-readable name of the risk factor
     pub name: String,
     /// Detailed description of what this factor represents
@@ -97,7 +96,7 @@ pub struct RiskFactor {
 /// Evaluates multiple security factors to produce an overall risk score
 /// with specific recommendations for risk mitigation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserRiskScore {
+pub(crate) struct UserRiskScore {
     /// Distinguished Name of the user in Active Directory
     pub user_dn: String,
     /// Username (samAccountName)
@@ -119,7 +118,7 @@ pub struct UserRiskScore {
 /// Evaluates entire AD domain across multiple security categories
 /// to produce an overall security posture score with trend analysis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DomainRiskScore {
+pub(crate) struct DomainRiskScore {
     /// Database ID of the domain (if stored)
     pub domain_id: Option<i64>,
     /// Fully qualified domain name
@@ -142,7 +141,7 @@ pub struct DomainRiskScore {
 
 /// Risk assessment for a specific security category
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CategoryRisk {
+pub(crate) struct CategoryRisk {
     /// Human-readable category name
     pub category: String,
     /// Category risk score (0.0-100.0)
@@ -155,7 +154,7 @@ pub struct CategoryRisk {
 
 /// Risk trend indicator comparing current to previous assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RiskTrend {
+pub(crate) enum RiskTrend {
     /// Security posture has improved (score decreased by >5 points)
     Improving,
     /// Security posture is stable (score changed by ≤5 points)
@@ -165,7 +164,7 @@ pub enum RiskTrend {
 }
 
 /// Risk scoring engine
-pub struct RiskScoringEngine;
+pub(crate) struct RiskScoringEngine;
 
 impl RiskScoringEngine {
     /// Calculates comprehensive risk score for an individual user account
@@ -215,7 +214,7 @@ impl RiskScoringEngine {
     /// );
     /// // Returns high/critical score due to inactive privileged account with old password
     /// ```
-    pub fn score_user(
+    pub(crate) fn score_user(
         user_dn: &str,
         username: &str,
         is_privileged: bool,
@@ -424,7 +423,7 @@ impl RiskScoringEngine {
     /// );
     /// // Returns high score due to old KRBTGT and stale admins
     /// ```
-    pub fn score_domain(
+    pub(crate) fn score_domain(
         domain_id: Option<i64>,
         domain_name: String,
         krbtgt_age_days: i64,
@@ -555,7 +554,7 @@ impl RiskScoringEngine {
         };
 
         // Sort top risks by score
-        top_risks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        top_risks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         let top_risks: Vec<RiskFactor> = top_risks.into_iter().take(5).collect();
 
         let recommendations = Self::generate_domain_recommendations(&categories, &top_risks);

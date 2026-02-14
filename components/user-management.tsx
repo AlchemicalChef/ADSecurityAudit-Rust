@@ -1,39 +1,4 @@
-/**
- * User Management Component
- *
- * Provides AD user account search, viewing, and management capabilities
- * with integrated security analysis.
- *
- * @module components/user-management
- *
- * Features:
- * - User search by name, SAM account name, or email
- * - Detailed user information display
- * - Account status indicators (enabled, locked, expired)
- * - Security flag analysis (AdminCount, password policies)
- * - Group membership viewing
- * - Account disabling capability
- *
- * Security Analysis:
- * - Password expiration status
- * - Password never expires flag (risk indicator)
- * - Account lockout status
- * - LastLogon timestamp
- * - AdminCount attribute (protected account)
- * - Sensitive account flag
- *
- * User Details Displayed:
- * - Distinguished Name (DN)
- * - SAM Account Name
- * - User Principal Name (UPN)
- * - Display Name
- * - Email Address
- * - Department/Title
- * - Manager
- * - Account Control Flags
- *
- * @see https://docs.microsoft.com/en-us/windows/win32/adschema/a-useraccountcontrol
- */
+/** User Management -- AD user search, account details, and disable-account workflow. */
 "use client"
 
 import type React from "react"
@@ -53,6 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { searchUsers, disableUser, type UserInfo } from "@/lib/tauri-api"
+
 import { CredentialPrompt, type Credentials } from "@/components/credential-prompt"
 import { Search, UserX, User, Mail, Shield, AlertTriangle, KeyRound, Eye, EyeOff } from "lucide-react"
 
@@ -83,7 +49,7 @@ export function UserManagement({ isConnected, savedCredentials }: UserManagement
       const results = await searchUsers(searchQuery)
       setUsers(results)
     } catch (error) {
-      console.error("Search failed:", error)
+      // Search failure; loading state reset in finally block
     } finally {
       setLoading(false)
     }
@@ -117,7 +83,6 @@ export function UserManagement({ isConnected, savedCredentials }: UserManagement
       setConfirmPassword("")
       handleSearch()
     } catch (error) {
-      console.error("Failed to disable user:", error)
       throw error
     }
   }

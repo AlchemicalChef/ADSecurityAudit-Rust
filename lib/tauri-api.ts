@@ -40,9 +40,6 @@
 
 // Mock implementation for browser preview - in production, use actual Tauri invoke
 
-// Environment detection: only use mock data in development/demo mode
-const IS_DEMO_MODE = typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__
-
 export interface UserInfo {
   distinguished_name: string
   username: string
@@ -145,7 +142,7 @@ const mockIncidents: Incident[] = [
 // Check if running in Tauri environment (Tauri 2.x uses __TAURI_INTERNALS__)
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
-async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+export async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) {
     const { invoke: tauriInvoke } = await import("@tauri-apps/api/core")
     return tauriInvoke<T>(command, args)
@@ -648,7 +645,7 @@ export type RiskFactorType =
   | "ExcessivePrivileges"
   | "ServiceAccountAsAdmin"
   | "NestedPrivileges"
-  | "UnconstainedDelegation"
+  | "UnconstrainedDelegation"
   | "KerberoastableSpn"
   | "NotProtected"
   | "PasswordNotRequired"
@@ -2600,8 +2597,7 @@ const mockPerformanceStats: PerformanceStats = {
 // ==========================================
 
 export async function getPerformanceStats(): Promise<PerformanceStats> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke<PerformanceStats>("get_performance_stats")
   }
   // Return mock data for development
@@ -2609,8 +2605,7 @@ export async function getPerformanceStats(): Promise<PerformanceStats> {
 }
 
 export async function invalidateCache(): Promise<void> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke("invalidate_cache")
   }
   // Mock for development
@@ -2618,8 +2613,7 @@ export async function invalidateCache(): Promise<void> {
 }
 
 export async function runComprehensiveAudit(): Promise<ComprehensiveAuditResult> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke<ComprehensiveAuditResult>("run_comprehensive_audit")
   }
   // Return mock data for development
@@ -2627,15 +2621,15 @@ export async function runComprehensiveAudit(): Promise<ComprehensiveAuditResult>
   // Note: You'll need to define mockDomainSecurityAudit, mockGpoAudit, etc. if they aren't already defined.
   // For now, assuming they exist in the scope or are imported.
   return {
-    domain_security: mockAdminSDHolderAnalysis, // Using a placeholder; replace with actual mock if available
-    gpo_audit: mockGroupAudit, // Using a placeholder; replace with actual mock if available
-    delegation_audit: mockDAEquivalenceAudit, // Using a placeholder; replace with actual mock if available
-    trust_audit: mockDAEquivalenceAudit, // Using a placeholder; replace with actual mock if available
-    permissions_audit: mockAdminSDHolderAnalysis, // Using a placeholder; replace with actual mock if available
-    group_audit: mockGroupAudit,
-    da_equivalence_audit: mockDAEquivalenceAudit,
+    domain_security: null,
+    gpo_audit: null,
+    delegation_audit: null,
+    trust_audit: null,
+    permissions_audit: null,
+    group_audit: null,
+    da_equivalence_audit: null,
     execution_stats: mockExecutorStats,
-    errors: [],
+    errors: ["Demo mode: comprehensive audit requires Active Directory connection"],
   }
 }
 
@@ -2649,7 +2643,7 @@ export interface DomainInfo {
   server: string
   base_dn: string
   is_active: boolean
-  status: { Connected: null } | { Disconnected: null } | { Error: string }
+  status: "Connected" | "Disconnected" | { Error: string }
   last_connected: string | null
 }
 
@@ -2660,8 +2654,7 @@ export async function addDomain(
   password: string,
   baseDn: string
 ): Promise<number> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke<number>("add_domain", { name, server, username, password, baseDn })
   }
   // Mock for development
@@ -2670,8 +2663,7 @@ export async function addDomain(
 }
 
 export async function getAllDomains(): Promise<DomainInfo[]> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke<DomainInfo[]>("get_all_domains")
   }
   // Mock for development
@@ -2682,15 +2674,14 @@ export async function getAllDomains(): Promise<DomainInfo[]> {
       server: "dc.example.com:636",
       base_dn: "DC=example,DC=com",
       is_active: true,
-      status: { Connected: null },
+      status: "Connected",
       last_connected: new Date().toISOString(),
     },
   ]
 }
 
 export async function switchDomain(domainId: number): Promise<void> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke("switch_domain", { domainId })
   }
   // Mock for development
@@ -2698,8 +2689,7 @@ export async function switchDomain(domainId: number): Promise<void> {
 }
 
 export async function deleteDomain(domainId: number): Promise<void> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke("delete_domain", { domainId })
   }
   // Mock for development
@@ -2712,8 +2702,7 @@ export async function testDomainConnection(
   password: string,
   baseDn: string
 ): Promise<boolean> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke<boolean>("test_domain_connection", { server, username, password, baseDn })
   }
   // Mock for development
@@ -2723,8 +2712,7 @@ export async function testDomainConnection(
 }
 
 export async function getActiveDomainInfo(): Promise<DomainInfo | null> {
-  if (typeof window !== "undefined" && "__TAURI__" in window) {
-    const { invoke } = await import("@tauri-apps/api/core")
+  if (isTauri) {
     return invoke<DomainInfo | null>("get_active_domain_info")
   }
   // Mock for development
@@ -2734,7 +2722,7 @@ export async function getActiveDomainInfo(): Promise<DomainInfo | null> {
     server: "dc.example.com:636",
     base_dn: "DC=example,DC=com",
     is_active: true,
-    status: { Connected: null },
+    status: "Connected",
     last_connected: new Date().toISOString(),
   }
 }

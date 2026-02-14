@@ -6,27 +6,25 @@
 //! - Suspicious group membership changes
 //! - Anomalous authentication behavior
 //!
-// Allow unused code - advanced detection methods for future features
-#![allow(dead_code)]
 
 use chrono::{DateTime, Utc, Duration, Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Use shared FindingSeverity from common_types
-pub use crate::common_types::FindingSeverity;
+pub(crate) use crate::common_types::FindingSeverity;
 
 /// Type alias for backward compatibility - anomaly severity uses the shared FindingSeverity enum
 ///
 /// Note: AnomalySeverity uses Low, Medium, High, Critical (FindingSeverity also has Informational)
-pub type AnomalySeverity = FindingSeverity;
+pub(crate) type AnomalySeverity = FindingSeverity;
 
 /// Types of anomalies detected by the behavioral analytics engine
 ///
 /// Each type represents a specific security concern with different
 /// detection algorithms and baseline comparisons.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum AnomalyType {
+pub(crate) enum AnomalyType {
     /// Logon occurring outside typical hours for the entity
     UnusualLogonTime,
     /// Logon from atypical IP address or location
@@ -54,7 +52,7 @@ pub enum AnomalyType {
 /// Represents a single detected security anomaly with all relevant
 /// context for investigation and response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Anomaly {
+pub(crate) struct Anomaly {
     /// Unique identifier for this anomaly (UUID)
     pub id: String,
     /// Timestamp when anomaly was detected
@@ -84,7 +82,7 @@ pub struct Anomaly {
 /// Machine learning-inspired profile that captures normal behavior patterns
 /// for anomaly detection. Built from historical activity analysis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BehavioralBaseline {
+pub(crate) struct BehavioralBaseline {
     /// Entity identifier (username, computer name, etc.)
     pub entity: String,
     /// Type of entity this baseline represents
@@ -111,7 +109,7 @@ pub struct BehavioralBaseline {
 
 /// Type of entity being monitored for anomalies
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum EntityType {
+pub(crate) enum EntityType {
     /// User account
     User,
     /// Computer/device account
@@ -123,7 +121,7 @@ pub enum EntityType {
 }
 
 /// Anomaly detection engine
-pub struct AnomalyDetector {
+pub(crate) struct AnomalyDetector {
     baselines: HashMap<String, BehavioralBaseline>,
     detection_sensitivity: f64,  // 0.0 to 1.0, higher = more sensitive
 }
@@ -144,7 +142,7 @@ impl AnomalyDetector {
     /// ```
     /// let detector = AnomalyDetector::new(0.7);  // Balanced sensitivity
     /// ```
-    pub fn new(sensitivity: f64) -> Self {
+    pub(crate) fn new(sensitivity: f64) -> Self {
         Self {
             baselines: HashMap::new(),
             detection_sensitivity: sensitivity.clamp(0.0, 1.0),
@@ -181,12 +179,31 @@ impl AnomalyDetector {
     /// detector.build_baseline("jdoe".to_string(), EntityType::User, &history);
     /// // Baseline is now ready for anomaly detection
     /// ```
-    pub fn build_baseline(
+    pub(crate) fn build_baseline(
         &mut self,
         entity: String,
         entity_type: EntityType,
         logon_history: &[LogonEvent],
     ) {
+        if logon_history.is_empty() {
+            // Store empty baseline rather than computing with zero divisor
+            let baseline = BehavioralBaseline {
+                entity: entity.clone(),
+                entity_type,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                typical_logon_hours: Vec::new(),
+                typical_logon_days: Vec::new(),
+                average_sessions_per_day: 0.0,
+                typical_source_ips: Vec::new(),
+                group_memberships: Vec::new(),
+                privileged: false,
+                failed_logon_threshold: 5,
+            };
+            self.baselines.insert(entity, baseline);
+            return;
+        }
+
         let mut typical_hours = HashMap::new();
         let mut typical_days = HashMap::new();
         let mut source_ips = HashMap::new();
@@ -283,7 +300,7 @@ impl AnomalyDetector {
     ///     }
     /// }
     /// ```
-    pub fn detect_logon_anomalies(
+    pub(crate) fn detect_logon_anomalies(
         &self,
         entity: &str,
         event: &LogonEvent,
@@ -404,7 +421,7 @@ impl AnomalyDetector {
     ///     println!("Recommended: Disable account immediately");
     /// }
     /// ```
-    pub fn detect_rapid_logons(
+    pub(crate) fn detect_rapid_logons(
         &self,
         entity: &str,
         recent_logons: &[LogonEvent],
@@ -500,7 +517,7 @@ impl AnomalyDetector {
     /// let anomalies = detector.detect_privilege_escalation("jdoe", &old, &new);
     /// // Returns 1 Critical anomaly for Domain Admins addition
     /// ```
-    pub fn detect_privilege_escalation(
+    pub(crate) fn detect_privilege_escalation(
         &self,
         entity: &str,
         old_groups: &[String],
@@ -529,7 +546,8 @@ impl AnomalyDetector {
             .filter(|g| privileged_groups.iter().any(|pg| g.contains(pg)))
             .collect();
 
-        if new_privileged.len() > old_privileged.len() {
+        // Compare actual group sets, not just counts - catches group swaps
+        {
             let added_groups: Vec<String> = new_privileged
                 .iter()
                 .filter(|g| !old_privileged.contains(g))
@@ -607,7 +625,8 @@ impl AnomalyDetector {
     /// );
     /// // Returns Critical anomaly - possible mass privilege escalation
     /// ```
-    pub fn detect_mass_group_changes(
+    #[allow(dead_code)]
+    pub(crate) fn detect_mass_group_changes(
         &self,
         group_name: &str,
         members_added: usize,
@@ -658,7 +677,7 @@ impl AnomalyDetector {
     ///
     /// # Returns
     /// Reference to baseline if exists, None otherwise
-    pub fn get_baseline(&self, entity: &str) -> Option<&BehavioralBaseline> {
+    pub(crate) fn get_baseline(&self, entity: &str) -> Option<&BehavioralBaseline> {
         self.baselines.get(entity)
     }
 
@@ -667,7 +686,8 @@ impl AnomalyDetector {
     /// # Arguments
     /// * `entity` - Entity identifier
     /// * `baseline` - New baseline to store
-    pub fn update_baseline(&mut self, entity: String, baseline: BehavioralBaseline) {
+    #[allow(dead_code)]
+    pub(crate) fn update_baseline(&mut self, entity: String, baseline: BehavioralBaseline) {
         self.baselines.insert(entity, baseline);
     }
 }
@@ -677,7 +697,7 @@ impl AnomalyDetector {
 /// Represents a single authentication/logon event with context
 /// needed for behavioral analysis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogonEvent {
+pub(crate) struct LogonEvent {
     /// When the logon occurred
     pub timestamp: DateTime<Utc>,
     /// Username attempting logon

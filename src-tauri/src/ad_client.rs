@@ -1,5 +1,16 @@
-// Allow unused code - client methods for future expansion
-#![allow(dead_code)]
+//! Active Directory LDAP Client Module
+//!
+//! Provides the core [`ActiveDirectoryClient`] that performs LDAP queries against
+//! Active Directory Domain Controllers. This module is the primary data-collection
+//! layer for every audit subsystem (privileged accounts, delegation, trusts, GPOs,
+//! domain security, KRBTGT, permissions, DA-equivalence, group membership, and
+//! infrastructure audits).
+//!
+//! # Design
+//!
+//! The client establishes an LDAP connection with configurable TLS, binds with
+//! the supplied credentials, and exposes `run_*_audit` methods that each collect
+//! LDAP search results and feed them into the corresponding audit engine.
 
 use anyhow::{anyhow, Result};
 use ldap3::{LdapConn, Scope, SearchEntry};
@@ -10,7 +21,7 @@ use std::collections::HashMap;
 
 /// Progress callback for audit operations
 /// Parameters: (current_step, total_steps, step_name)
-pub type ProgressCallback = Box<dyn Fn(usize, usize, &str) + Send + Sync>;
+pub(crate) type ProgressCallback = Box<dyn Fn(usize, usize, &str) + Send + Sync>;
 
 use crate::ldap_timeout::{
     ldap_connect_with_timeout, ldap_bind_with_timeout, ldap_unbind_with_timeout,
@@ -38,7 +49,7 @@ use crate::privileged_accounts::{
 // **NEW IMPORTS FROM UPDATES**
 use crate::domain_security::{
     DomainSecurityAudit, PasswordPolicy, LegacyComputer,
-    AzureSsoAccountStatus, OptionalFeatureStatus, FunctionalLevel, Severity,
+    AzureSsoAccountStatus, OptionalFeatureStatus, FunctionalLevel,
     evaluate_password_policy, evaluate_functional_level, evaluate_legacy_computers,
     evaluate_azure_sso_accounts, evaluate_recycle_bin, calculate_risk_score,
 };
@@ -79,7 +90,7 @@ use crate::common_types::{extract_domain_from_dn, SeverityCounts};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserInfo {
+pub(crate) struct UserInfo {
     pub distinguished_name: String,
     pub username: String,
     pub email: String,
@@ -90,12 +101,13 @@ pub struct UserInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ValidationResult {
+pub(crate) struct ValidationResult {
     pub valid: bool,
     pub error: Option<String>,
 }
 
-pub struct ActiveDirectoryClient {
+#[derive(Clone)]
+pub(crate) struct ActiveDirectoryClient {
     server: String,
     credentials: crate::secure_types::Credentials,
     base_dn: String,
@@ -118,7 +130,7 @@ mod dangerous_rights {
 }
 
 impl ActiveDirectoryClient {
-    pub async fn new(
+    pub(crate) async fn new(
         server: String,
         username: String,
         password: String,
@@ -197,7 +209,7 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn validate_credentials(
+    pub(crate) async fn validate_credentials(
         server: &str,
         username: &str,
         password: &str,
@@ -361,7 +373,7 @@ impl ActiveDirectoryClient {
         }
     }
 
-    pub async fn search_users(&self, query: &str) -> Result<Vec<UserInfo>> {
+    pub(crate) async fn search_users(&self, query: &str) -> Result<Vec<UserInfo>> {
         let mut ldap = self.get_connection().await?;
 
         // Escape user input to prevent LDAP injection attacks
@@ -399,7 +411,7 @@ impl ActiveDirectoryClient {
         Ok(users)
     }
 
-    pub async fn get_user_details(&self, distinguished_name: &str) -> Result<UserInfo> {
+    pub(crate) async fn get_user_details(&self, distinguished_name: &str) -> Result<UserInfo> {
         let mut ldap = self.get_connection().await?;
 
         // Use DN directly as search base with Scope::Base for security and efficiency
@@ -432,7 +444,7 @@ impl ActiveDirectoryClient {
         Ok(user)
     }
 
-    pub async fn disable_user(&self, distinguished_name: &str, reason: &str) -> Result<()> {
+    pub(crate) async fn disable_user(&self, distinguished_name: &str, reason: &str) -> Result<()> {
         use ldap3::Mod;
         use std::collections::HashSet;
 
@@ -502,7 +514,7 @@ impl ActiveDirectoryClient {
         Ok(())
     }
 
-    pub async fn analyze_adminsdholder(&self) -> Result<AdminSDHolderAnalysis> {
+    pub(crate) async fn analyze_adminsdholder(&self) -> Result<AdminSDHolderAnalysis> {
         let ldap = self.get_connection().await?;
 
         // AdminSDHolder is located at CN=AdminSDHolder,CN=System,<base_dn>
@@ -680,7 +692,7 @@ impl ActiveDirectoryClient {
         Ok(analysis)
     }
 
-    pub async fn get_adminsdholder_risky_aces(&self) -> Result<Vec<AccessControlEntry>> {
+    pub(crate) async fn get_adminsdholder_risky_aces(&self) -> Result<Vec<AccessControlEntry>> {
         let analysis = self.analyze_adminsdholder().await?;
         
         Ok(analysis.dacl_entries
@@ -706,7 +718,7 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn get_krbtgt_account(&self) -> Result<KrbtgtAccountInfo> {
+    pub(crate) async fn get_krbtgt_account(&self) -> Result<KrbtgtAccountInfo> {
         info!("get_krbtgt_account: Starting...");
         let ldap = self.get_connection().await?;
         info!("get_krbtgt_account: Got LDAP connection");
@@ -795,12 +807,12 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn analyze_krbtgt(&self) -> Result<KrbtgtAgeAnalysis> {
+    pub(crate) async fn analyze_krbtgt(&self) -> Result<KrbtgtAgeAnalysis> {
         let account_info = self.get_krbtgt_account().await?;
         Ok(analyze_krbtgt_age(&account_info))
     }
 
-    pub async fn rotate_krbtgt(
+    pub(crate) async fn rotate_krbtgt(
         &self,
         request: RotationRequest,
         current_status: RotationStatus,
@@ -964,21 +976,22 @@ impl ActiveDirectoryClient {
 
     fn parse_ad_timestamp(&self, timestamp: &str) -> String {
         // Format: YYYYMMDDHHmmss.0Z
-        if timestamp.len() >= 14 {
+        // Validate ASCII before byte-position slicing to prevent panic on multi-byte UTF-8
+        if timestamp.len() >= 14 && timestamp.is_ascii() {
             let year = &timestamp[0..4];
             let month = &timestamp[4..6];
             let day = &timestamp[6..8];
             let hour = &timestamp[8..10];
             let minute = &timestamp[10..12];
             let second = &timestamp[12..14];
-            
+
             format!("{}-{}-{}T{}:{}:{}Z", year, month, day, hour, minute, second)
         } else {
             timestamp.to_string()
         }
     }
 
-    pub async fn enumerate_privileged_accounts(&self) -> Result<Vec<PrivilegedAccount>> {
+    pub(crate) async fn enumerate_privileged_accounts(&self) -> Result<Vec<PrivilegedAccount>> {
         let mut ldap = self.get_connection().await?;
         
         info!(
@@ -1070,7 +1083,8 @@ impl ActiveDirectoryClient {
         Ok(privileged_accounts)
     }
     
-    pub async fn get_privileged_account_summary(&self) -> Result<PrivilegedAccountSummary> {
+    #[allow(dead_code)]
+    pub(crate) async fn get_privileged_account_summary(&self) -> Result<PrivilegedAccountSummary> {
         let accounts = self.enumerate_privileged_accounts().await?;
         let groups = self.get_privileged_groups().await?;
         
@@ -1154,7 +1168,7 @@ impl ActiveDirectoryClient {
         Ok(summary)
     }
 
-    pub async fn get_privileged_groups(&self) -> Result<Vec<PrivilegedGroup>> {
+    pub(crate) async fn get_privileged_groups(&self) -> Result<Vec<PrivilegedGroup>> {
         let mut ldap = self.get_connection().await?;
         let mut groups = Vec::new();
         let group_definitions = get_privileged_group_definitions();
@@ -1199,7 +1213,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Get privileged groups with progress callback
-    pub async fn get_privileged_groups_with_progress(
+    pub(crate) async fn get_privileged_groups_with_progress(
         &self,
         progress: Option<&ProgressCallback>,
     ) -> Result<Vec<PrivilegedGroup>> {
@@ -1253,7 +1267,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Get privileged account summary with progress callback
-    pub async fn get_privileged_account_summary_with_progress(
+    pub(crate) async fn get_privileged_account_summary_with_progress(
         &self,
         progress: Option<ProgressCallback>,
     ) -> Result<PrivilegedAccountSummary> {
@@ -1432,7 +1446,7 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn audit_domain_security(&self) -> Result<DomainSecurityAudit> {
+    pub(crate) async fn audit_domain_security(&self) -> Result<DomainSecurityAudit> {
         info!("audit_domain_security: Starting...");
         let ldap = self.get_connection().await?;
         info!("audit_domain_security: Got LDAP connection");
@@ -1611,7 +1625,10 @@ impl ActiveDirectoryClient {
         info!("audit_domain_security: Step 7 - Evaluating findings");
         let mut findings = Vec::new();
         findings.extend(evaluate_password_policy(&password_policy, &domain_dns_root));
+        // TODO: Query forest functional level from CN=Partitions,CN=Configuration
+        // For now, pass domain_level for forest_level with a note
         findings.extend(evaluate_functional_level(&domain_level, &domain_level));
+        // Note: forest_functional_level below may differ from domain level in multi-domain forests
         findings.extend(evaluate_legacy_computers(&legacy_computers));
         findings.extend(evaluate_azure_sso_accounts(&azure_sso_accounts));
         findings.extend(evaluate_recycle_bin(recycle_bin_enabled));
@@ -1653,12 +1670,12 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn audit_gpos(&self) -> Result<GpoAudit> {
+    pub(crate) async fn audit_gpos(&self) -> Result<GpoAudit> {
         self.audit_gpos_with_progress(None).await
     }
 
     /// Audit GPOs with optional progress callback
-    pub async fn audit_gpos_with_progress(
+    pub(crate) async fn audit_gpos_with_progress(
         &self,
         progress: Option<ProgressCallback>,
     ) -> Result<GpoAudit> {
@@ -1900,7 +1917,7 @@ impl ActiveDirectoryClient {
             path,
             created_time: created,
             modified_time: modified,
-            owner: "Domain Admins".to_string(),
+            owner: "Unknown (parse from nTSecurityDescriptor)".to_string(), // TODO: Parse owner SID from SD
             permissions,
             links,
             computer_settings_enabled: (flags & 2) == 0,
@@ -2072,8 +2089,9 @@ impl ActiveDirectoryClient {
 
         // For domain SIDs (S-1-5-21-...), try to look up in AD
         if sid.starts_with("S-1-5-21-") {
-            // Search for object with this SID
-            let filter = format!("(objectSid={})", sid);
+            // Search for object with this SID (escape to prevent LDAP injection)
+            let escaped_sid = crate::ldap_utils::escape_ldap_filter(sid);
+            let filter = format!("(objectSid={})", escaped_sid);
 
             // Use timeout search to prevent hanging
             match self.search_with_timeout(
@@ -2107,41 +2125,14 @@ impl ActiveDirectoryClient {
         Ok((sid.to_string(), ldap))
     }
 
-    // Simulate SYSVOL permissions for demo
+    // SYSVOL permissions cannot be read via LDAP (requires SMB/CIFS access).
+    // Return empty to avoid false sense of security from hardcoded data.
     fn get_simulated_sysvol_permissions(&self) -> Vec<SysvolPermission> {
-        vec![
-            SysvolPermission {
-                identity: "NT AUTHORITY\\SYSTEM".to_string(),
-                access_type: "Allow".to_string(),
-                rights: "FullControl".to_string(),
-                inherited: false,
-                is_dangerous: false,
-            },
-            SysvolPermission {
-                identity: "BUILTIN\\Administrators".to_string(),
-                access_type: "Allow".to_string(),
-                rights: "FullControl".to_string(),
-                inherited: false,
-                is_dangerous: false,
-            },
-            SysvolPermission {
-                identity: "Domain Admins".to_string(),
-                access_type: "Allow".to_string(),
-                rights: "FullControl".to_string(),
-                inherited: false,
-                is_dangerous: false,
-            },
-            SysvolPermission {
-                identity: "Authenticated Users".to_string(),
-                access_type: "Allow".to_string(),
-                rights: "Read".to_string(),
-                inherited: false,
-                is_dangerous: false,
-            },
-        ]
+        warn!("SYSVOL permissions not audited - requires SMB access which is not yet implemented");
+        Vec::new()
     }
 
-    pub async fn audit_delegation(&self) -> Result<DelegationAudit> {
+    pub(crate) async fn audit_delegation(&self) -> Result<DelegationAudit> {
         info!("audit_delegation: Starting...");
         let ldap = self.get_connection().await?;
         info!("audit_delegation: Got LDAP connection");
@@ -2350,7 +2341,7 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn audit_domain_trusts(&self) -> Result<DomainTrustAudit> {
+    pub(crate) async fn audit_domain_trusts(&self) -> Result<DomainTrustAudit> {
         info!("audit_domain_trusts: Starting...");
         let ldap = self.get_connection().await?;
         info!("audit_domain_trusts: Got LDAP connection");
@@ -2504,7 +2495,7 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn audit_permissions(&self) -> Result<PermissionsAudit> {
+    pub(crate) async fn audit_permissions(&self) -> Result<PermissionsAudit> {
         info!("audit_permissions: Starting...");
         let ldap = self.get_connection().await?;
         info!("audit_permissions: Got LDAP connection");
@@ -2782,7 +2773,7 @@ impl ActiveDirectoryClient {
         }
     }
     
-    pub async fn audit_privileged_groups(&self) -> Result<GroupAudit> {
+    pub(crate) async fn audit_privileged_groups(&self) -> Result<GroupAudit> {
         info!("audit_privileged_groups: Starting...");
         let mut ldap = self.get_connection().await?;
         info!("audit_privileged_groups: Got LDAP connection");
@@ -2929,13 +2920,13 @@ impl ActiveDirectoryClient {
         })
     }
 
-    pub async fn audit_da_equivalence(&self) -> Result<DAEquivalenceAudit> {
+    pub(crate) async fn audit_da_equivalence(&self) -> Result<DAEquivalenceAudit> {
         // Call the version with no progress callback
         self.audit_da_equivalence_with_progress(None).await
     }
 
     /// Audit DA equivalence with optional progress callback
-    pub async fn audit_da_equivalence_with_progress(
+    pub(crate) async fn audit_da_equivalence_with_progress(
         &self,
         progress: Option<ProgressCallback>,
     ) -> Result<DAEquivalenceAudit> {
@@ -3129,7 +3120,13 @@ impl ActiveDirectoryClient {
 
     async fn check_sid_history(&self, audit: &mut DAEquivalenceAudit, ldap: LdapConn) -> Result<LdapConn> {
         // Get domain SID for comparison
-        let domain_sid = self.get_domain_sid()?;
+        let domain_sid = match self.get_domain_sid().await {
+            Ok(sid) => sid,
+            Err(e) => {
+                warn!("Failed to get domain SID, SID History same-domain check will be skipped: {}", e);
+                String::new()
+            }
+        };
 
         // Find users with sIDHistory
         let filter = "(sIDHistory=*)";
@@ -3147,8 +3144,10 @@ impl ActiveDirectoryClient {
             let entry = SearchEntry::construct(entry);
             let sam = entry.get_sam_account_name();
             let dn = entry.get_string_attr("distinguishedName");
-            // Parse SID history (in production, parse binary SID)
-            let sid_history = entry.get_multi_attr("sIDHistory");
+            // Parse SID history from binary attribute
+            let sid_history: Vec<String> = entry.bin_attrs.get("sIDHistory")
+                .map(|bins| bins.iter().map(|b| crate::ldap_utils::parse_sid(b)).collect())
+                .unwrap_or_default();
 
             for sid in sid_history {
                 let is_same_domain = sid.starts_with(&domain_sid);
@@ -3171,10 +3170,31 @@ impl ActiveDirectoryClient {
         Ok(ldap)
     }
 
-    fn get_domain_sid(&self) -> Result<String> {
-        // In production, retrieve actual domain SID from domain object
-        // For now, return a placeholder
-        Ok("S-1-5-21-1234567890-1234567890-1234567890".to_string())
+    async fn get_domain_sid(&self) -> Result<String> {
+        // Retrieve the actual domain SID from the domain root object
+        let ldap = self.get_connection().await?;
+        let (rs, ldap) = self.search_with_timeout(
+            ldap,
+            &self.base_dn,
+            Scope::Base,
+            "(objectClass=domain)",
+            vec!["objectSid"],
+        ).await?;
+
+        Self::unbind_with_timeout(ldap).await;
+
+        if let Some(entry) = rs.into_iter().next() {
+            let entry = SearchEntry::construct(entry);
+            // objectSid is a binary attribute - parse from bin_attrs
+            if let Some(sid_bytes_list) = entry.bin_attrs.get("objectSid") {
+                if let Some(sid_bytes) = sid_bytes_list.first() {
+                    return Ok(crate::ldap_utils::parse_sid(sid_bytes));
+                }
+            }
+        }
+
+        warn!("Could not retrieve domain SID from directory; SID History analysis may be incomplete");
+        Err(anyhow!("Failed to retrieve domain SID"))
     }
 
     async fn check_dcsync_rights(&self, audit: &mut DAEquivalenceAudit, mut ldap: LdapConn) -> Result<LdapConn> {
@@ -3216,6 +3236,8 @@ impl ActiveDirectoryClient {
             "S-1-5-32-544",  // BUILTIN\Administrators
             "S-1-5-9",       // Enterprise Domain Controllers
         ];
+        // Also allow Domain Admins (-512), Enterprise Admins (-519),
+        // Domain Controllers (-516), and Enterprise Read-Only DCs (-498)
 
         // Track DCSync rights by principal
         let mut dcsync_rights_by_principal: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
@@ -3234,6 +3256,8 @@ impl ActiveDirectoryClient {
                 if guid_lower == DS_REPLICATION_GET_CHANGES || guid_lower == DS_REPLICATION_GET_CHANGES_ALL {
                     // Check if this is a well-known/allowed SID
                     let is_allowed = allowed_sids.contains(&ace.trustee_sid.as_str())
+                        || ace.trustee_sid.ends_with("-498")  // Enterprise Read-Only DCs
+                        || ace.trustee_sid.ends_with("-512")  // Domain Admins
                         || ace.trustee_sid.ends_with("-516")  // Domain Controllers
                         || ace.trustee_sid.ends_with("-519"); // Enterprise Admins
 
@@ -3267,9 +3291,10 @@ impl ActiveDirectoryClient {
             };
             ldap = returned_ldap;
 
-            // Check if they have both rights (full DCSync)
-            let has_full_dcsync = rights.len() >= 2 ||
-                rights.iter().any(|r| r.contains("Get-Changes-All"));
+            // Full DCSync requires BOTH Get-Changes AND Get-Changes-All
+            let has_get_changes = rights.iter().any(|r| r == "DS-Replication-Get-Changes");
+            let has_get_changes_all = rights.iter().any(|r| r == "DS-Replication-Get-Changes-All");
+            let has_full_dcsync = has_get_changes && has_get_changes_all;
 
             audit.add_dcsync_right(crate::da_equivalence::DCSyncRight {
                 principal: identity,
@@ -3685,10 +3710,12 @@ impl ActiveDirectoryClient {
             if let Some(hostname) = dns_hostname {
                 // Check if web enrollment is likely enabled (we can't directly check IIS config via LDAP)
                 // This is a potential risk that should be manually verified
+                // Note: Cannot determine NTLM/web enrollment status via LDAP alone.
+                // Flagging as potential - requires manual verification of IIS/EPA config.
                 audit.add_esc8_vulnerability(crate::da_equivalence::ESC8Vulnerability {
                     ca_name: ca_name.clone(),
                     web_enrollment_server: hostname.clone(),
-                    ntlm_enabled: true, // Assume NTLM is enabled unless explicitly disabled
+                    ntlm_enabled: false, // Cannot determine via LDAP; requires manual verification
                 });
             }
         }
@@ -4779,7 +4806,7 @@ impl ActiveDirectoryClient {
             return Ok(ldap);
         }
 
-        // Now check for constrained delegation
+        // Now check for constrained delegation (include userAccountControl for T2A4D check)
         let filter = "(msDS-AllowedToDelegateTo=*)";
         let (rs, ldap) = self.search_with_timeout(
             ldap,
@@ -4790,6 +4817,7 @@ impl ActiveDirectoryClient {
                 "sAMAccountName",
                 "distinguishedName",
                 "msDS-AllowedToDelegateTo",
+                "userAccountControl",
             ],
         ).await?;
 
@@ -4798,6 +4826,9 @@ impl ActiveDirectoryClient {
             let sam = entry.get_sam_account_name();
             let dn = entry.get_string_attr("distinguishedName");
             let delegation_targets = entry.get_multi_attr("msDS-AllowedToDelegateTo");
+            // Check TrustedToAuthForDelegation (T2A4D) flag - UAC bit 0x1000000
+            let uac: u32 = entry.get_u32_attr("userAccountControl");
+            let is_t2a4d = (uac & 0x1000000) != 0;
 
             // Check if any delegation target is a DC
             for target in &delegation_targets {
@@ -4814,7 +4845,7 @@ impl ActiveDirectoryClient {
                         account_name: sam.clone(),
                         distinguished_name: dn.clone(),
                         delegation_target: target.clone(),
-                        is_protocol_transition: false, // Will be enhanced later
+                        is_protocol_transition: is_t2a4d,
                     });
                     break; // Only add once per account
                 }
@@ -4863,7 +4894,7 @@ impl ActiveDirectoryClient {
 
     /// Test if anonymous LDAP bind is allowed
     /// This is a security risk as it allows unauthenticated enumeration
-    pub async fn test_anonymous_ldap_bind(&self) -> bool {
+    pub(crate) async fn test_anonymous_ldap_bind(&self) -> bool {
         use crate::ldap_timeout::DEFAULT_CONNECT_TIMEOUT;
 
         let ldap_url = format!("ldap://{}:389", self.server.replace("ldap://", "").replace("ldaps://", "").split(':').next().unwrap_or(&self.server));
@@ -4895,7 +4926,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Check LDAP security settings including dsHeuristics
-    pub async fn check_ldap_security(&self) -> Result<crate::infrastructure_audit::LdapSecurityStatus> {
+    pub(crate) async fn check_ldap_security(&self) -> Result<crate::infrastructure_audit::LdapSecurityStatus> {
         let ldap = self.get_connection().await?;
 
         // Test anonymous bind capability
@@ -4945,7 +4976,7 @@ impl ActiveDirectoryClient {
 
     /// Check for Print Spooler exposure on Domain Controllers
     /// Print Spooler is vulnerable to PrintNightmare and SpoolSample attacks
-    pub async fn check_print_spooler_exposure(&self) -> Result<Vec<crate::infrastructure_audit::PrintSpoolerExposure>> {
+    pub(crate) async fn check_print_spooler_exposure(&self) -> Result<Vec<crate::infrastructure_audit::PrintSpoolerExposure>> {
         let ldap = self.get_connection().await?;
         let mut exposures = Vec::new();
 
@@ -5007,7 +5038,7 @@ impl ActiveDirectoryClient {
 
     /// Check Authentication Silos configuration
     /// Silos restrict where Tier 0 accounts can authenticate from
-    pub async fn check_authentication_silos(&self) -> Result<crate::infrastructure_audit::AuthSiloStatus> {
+    pub(crate) async fn check_authentication_silos(&self) -> Result<crate::infrastructure_audit::AuthSiloStatus> {
         let ldap = self.get_connection().await?;
 
         // Get configuration naming context
@@ -5119,7 +5150,7 @@ impl ActiveDirectoryClient {
 
     /// Check Pre-Windows 2000 Compatible Access group membership
     /// This group with Everyone or Anonymous Logon allows anonymous enumeration
-    pub async fn check_pre_2000_compatible_access(&self) -> Result<crate::infrastructure_audit::PreWindows2000Status> {
+    pub(crate) async fn check_pre_2000_compatible_access(&self) -> Result<crate::infrastructure_audit::PreWindows2000Status> {
         let ldap = self.get_connection().await?;
 
         // Query the Pre-Windows 2000 Compatible Access group in Builtin container
@@ -5177,7 +5208,7 @@ impl ActiveDirectoryClient {
 
     /// Enumerate Fine-Grained Password Policies (Password Settings Objects)
     /// PSOs can override the Default Domain Policy for specific users/groups
-    pub async fn enumerate_fine_grained_password_policies(&self, domain_policy: &crate::domain_security::PasswordPolicy) -> Result<Vec<crate::infrastructure_audit::FineGrainedPasswordPolicy>> {
+    pub(crate) async fn enumerate_fine_grained_password_policies(&self, domain_policy: &crate::domain_security::PasswordPolicy) -> Result<Vec<crate::infrastructure_audit::FineGrainedPasswordPolicy>> {
         let ldap = self.get_connection().await?;
         let mut policies = Vec::new();
 
@@ -5317,7 +5348,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Run comprehensive infrastructure security audit
-    pub async fn audit_infrastructure_security(&self) -> Result<crate::infrastructure_audit::InfrastructureAudit> {
+    pub(crate) async fn audit_infrastructure_security(&self) -> Result<crate::infrastructure_audit::InfrastructureAudit> {
         use crate::infrastructure_audit::*;
 
         info!("audit_infrastructure_security: Starting infrastructure security audit...");
@@ -5548,7 +5579,8 @@ impl ActiveDirectoryClient {
     ///
     /// Checks msDS-SupportedEncryptionTypes for accounts that only support
     /// RC4-HMAC-MD5 encryption, which is vulnerable to offline cracking.
-    pub async fn audit_kerberos_encryption(&self) -> Result<crate::infrastructure_audit::KerberosEncryptionAudit> {
+    #[allow(dead_code)]
+    pub(crate) async fn audit_kerberos_encryption(&self) -> Result<crate::infrastructure_audit::KerberosEncryptionAudit> {
         use crate::infrastructure_audit::{KerberosEncryptionAudit, KerberosEncryptionStatus};
 
         info!("audit_kerberos_encryption: Starting Kerberos encryption audit...");
@@ -5653,7 +5685,8 @@ impl ActiveDirectoryClient {
     ///
     /// Computers should rotate passwords every 30 days by default.
     /// Accounts with password age > 60 days may indicate orphaned systems.
-    pub async fn audit_stale_computers(&self) -> Result<crate::infrastructure_audit::StaleComputerAudit> {
+    #[allow(dead_code)]
+    pub(crate) async fn audit_stale_computers(&self) -> Result<crate::infrastructure_audit::StaleComputerAudit> {
         use crate::infrastructure_audit::{StaleComputerAudit, StaleComputerAccount};
 
         info!("audit_stale_computers: Starting stale computer audit...");
@@ -5792,7 +5825,8 @@ impl ActiveDirectoryClient {
     ///
     /// DCShadow attack involves registering SPNs that make a computer appear
     /// to be a Domain Controller for rogue replication.
-    pub async fn check_dcshadow_indicators(&self) -> Result<crate::infrastructure_audit::DCShadowAudit> {
+    #[allow(dead_code)]
+    pub(crate) async fn check_dcshadow_indicators(&self) -> Result<crate::infrastructure_audit::DCShadowAudit> {
         use crate::infrastructure_audit::{DCShadowAudit, DCShadowIndicator, DCShadowIndicatorType};
 
         info!("check_dcshadow_indicators: Starting DCShadow detection...");
@@ -5937,7 +5971,8 @@ impl ActiveDirectoryClient {
     /// - Kerberos encryption audit (RC4 weak encryption)
     /// - Stale computer account detection
     /// - DCShadow attack indicators
-    pub async fn audit_extended_infrastructure_security(&self) -> Result<crate::infrastructure_audit::ExtendedInfrastructureAudit> {
+    #[allow(dead_code)]
+    pub(crate) async fn audit_extended_infrastructure_security(&self) -> Result<crate::infrastructure_audit::ExtendedInfrastructureAudit> {
         use crate::infrastructure_audit::ExtendedInfrastructureAudit;
 
         info!("audit_extended_infrastructure_security: Starting extended infrastructure audit...");
@@ -6002,7 +6037,8 @@ impl ActiveDirectoryClient {
     /// - SMB signing configuration
     /// - LmCompatibilityLevel (NTLM restrictions)
     /// - GPO security settings related to NTLM
-    pub async fn audit_ntlm_security(&self) -> Result<crate::infrastructure_audit::NtlmSecurityAudit> {
+    #[allow(dead_code)]
+    pub(crate) async fn audit_ntlm_security(&self) -> Result<crate::infrastructure_audit::NtlmSecurityAudit> {
         use crate::infrastructure_audit::*;
 
         info!("audit_ntlm_security: Starting NTLM/network security audit...");
@@ -6046,6 +6082,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Check LDAP signing status by testing connection and parsing GPOs
+    #[allow(dead_code)]
     async fn check_ldap_signing_status(&self) -> Result<crate::infrastructure_audit::LdapSigningStatus> {
         use crate::infrastructure_audit::LdapSigningStatus;
 
@@ -6121,6 +6158,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Check SMB signing configuration via GPO analysis
+    #[allow(dead_code)]
     async fn check_smb_signing_via_gpo(&self) -> Result<(
         crate::infrastructure_audit::SmbSigningStatus,
         Vec<crate::infrastructure_audit::GpoSecuritySetting>
@@ -6231,6 +6269,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Check NTLM restriction settings (LmCompatibilityLevel)
+    #[allow(dead_code)]
     async fn check_ntlm_restrictions(&self) -> Result<crate::infrastructure_audit::NtlmRestrictionStatus> {
         use crate::infrastructure_audit::NtlmRestrictionStatus;
 
@@ -6332,6 +6371,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Calculate overall NTLM security score
+    #[allow(dead_code)]
     fn calculate_ntlm_security_score(
         ldap_signing: &crate::infrastructure_audit::LdapSigningStatus,
         smb_signing: &crate::infrastructure_audit::SmbSigningStatus,
@@ -6379,6 +6419,7 @@ impl ActiveDirectoryClient {
     }
 
     /// Get domain functional level
+    #[allow(dead_code)]
     async fn get_domain_functional_level(&self) -> Result<u32> {
         let ldap = self.get_connection().await?;
 

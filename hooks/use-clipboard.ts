@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 /**
  * Hook for clipboard operations with copy feedback
@@ -19,13 +19,28 @@ import { useState, useCallback } from 'react'
  */
 export function useClipboard<T = string>(resetDelay: number = 2000) {
   const [copiedValue, setCopiedValue] = useState<T | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   const copyToClipboard = useCallback(
     async (text: string, identifier?: T) => {
       try {
         await navigator.clipboard.writeText(text)
         setCopiedValue(identifier ?? (text as unknown as T))
-        setTimeout(() => setCopiedValue(null), resetDelay)
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+        }
+        timeoutRef.current = setTimeout(() => {
+          setCopiedValue(null)
+          timeoutRef.current = null
+        }, resetDelay)
         return true
       } catch {
         console.error('Failed to copy to clipboard')

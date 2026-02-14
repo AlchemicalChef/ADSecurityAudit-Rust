@@ -10,8 +10,6 @@
 //! When `use_gssapi` is enabled, the pool will use the current Windows user's
 //! Kerberos ticket for authentication, eliminating the need to store passwords.
 //!
-// Allow unused code - connection pooling features for future optimization
-#![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
 use ldap3::{LdapConnAsync, LdapConnSettings, Ldap};
@@ -25,7 +23,8 @@ use crate::auth::{AuthConfig, AuthMethod, Authenticator, AuthResult};
 
 /// Connection pool configuration
 #[derive(Debug, Clone)]
-pub struct PoolConfig {
+#[allow(dead_code)]
+pub(crate) struct PoolConfig {
     /// Maximum number of concurrent connections
     pub max_connections: usize,
     /// Connection timeout
@@ -51,6 +50,7 @@ impl Default for PoolConfig {
 }
 
 /// A pooled LDAP connection with tracking metadata
+#[allow(dead_code)]
 struct PooledConnection {
     ldap: Ldap,
     created_at: Instant,
@@ -59,6 +59,7 @@ struct PooledConnection {
     id: u64,
 }
 
+#[allow(dead_code)]
 impl PooledConnection {
     fn is_expired(&self, idle_timeout: Duration) -> bool {
         self.last_used.elapsed() > idle_timeout
@@ -66,7 +67,7 @@ impl PooledConnection {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PoolStats {
+pub(crate) struct PoolStats {
     pub connections_created: u64,
     pub connections_reused: u64,
     pub connections_failed: u64,
@@ -77,7 +78,8 @@ pub struct PoolStats {
 }
 
 /// High-performance LDAP connection pool
-pub struct LdapConnectionPool {
+#[allow(dead_code)]
+pub(crate) struct LdapConnectionPool {
     server: String,
     credentials: Option<crate::secure_types::Credentials>,
     base_dn: String,
@@ -93,9 +95,10 @@ pub struct LdapConnectionPool {
     last_auth_result: RwLock<Option<AuthResult>>,
 }
 
+#[allow(dead_code)]
 impl LdapConnectionPool {
     /// Create a new connection pool with simple bind (username/password)
-    pub fn new(
+    pub(crate) fn new(
         server: String,
         username: String,
         password: String,
@@ -128,7 +131,7 @@ impl LdapConnectionPool {
     ///
     /// Uses the current Windows user's Kerberos ticket for authentication.
     /// No username/password required - uses integrated Windows authentication.
-    pub fn new_with_gssapi(
+    pub(crate) fn new_with_gssapi(
         server: String,
         base_dn: String,
         config: Option<PoolConfig>,
@@ -157,7 +160,7 @@ impl LdapConnectionPool {
     /// Create a connection pool with automatic authentication method selection
     ///
     /// Tries GSSAPI first, falls back to simple bind if credentials provided.
-    pub fn new_auto(
+    pub(crate) fn new_auto(
         server: String,
         username: Option<String>,
         password: Option<String>,
@@ -192,22 +195,22 @@ impl LdapConnectionPool {
     }
 
     /// Get the authentication method being used
-    pub fn auth_method(&self) -> AuthMethod {
+    pub(crate) fn auth_method(&self) -> AuthMethod {
         self.auth_method
     }
 
     /// Get the last authentication result
-    pub async fn last_auth_result(&self) -> Option<AuthResult> {
+    pub(crate) async fn last_auth_result(&self) -> Option<AuthResult> {
         self.last_auth_result.read().await.clone()
     }
 
     /// Get the base DN
-    pub fn base_dn(&self) -> &str {
+    pub(crate) fn base_dn(&self) -> &str {
         &self.base_dn
     }
 
     /// Acquire a connection from the pool
-    pub async fn acquire(self: &Arc<Self>) -> Result<PooledLdapGuard> {
+    pub(crate) async fn acquire(self: &Arc<Self>) -> Result<PooledLdapGuard> {
         // Wait for available connection slot - use owned permit for Send safety
         let permit = self.semaphore.clone().acquire_owned().await
             .map_err(|_| anyhow!("Connection pool closed"))?;
@@ -302,7 +305,7 @@ impl LdapConnectionPool {
             use_tls: self.use_ldaps,
             credentials: self.credentials.clone(),
             connect_timeout: self.config.connect_timeout,
-            skip_tls_verify: true, // Enterprise compatibility with internal CAs
+            skip_tls_verify: false, // Set to true only for environments with self-signed/internal CA certs
         };
 
         info!(
@@ -341,7 +344,7 @@ impl LdapConnectionPool {
 
         let settings = LdapConnSettings::new()
             .set_conn_timeout(self.config.connect_timeout)
-            .set_no_tls_verify(true);
+            .set_no_tls_verify(false);
 
         let url = if self.use_ldaps {
             format!("ldaps://{}", self.server.replace("ldaps://", ""))
@@ -385,12 +388,12 @@ impl LdapConnectionPool {
     }
 
     /// Get pool statistics
-    pub async fn stats(&self) -> PoolStats {
+    pub(crate) async fn stats(&self) -> PoolStats {
         self.stats.read().await.clone()
     }
 
     /// Clean up expired connections
-    pub async fn cleanup_expired(&self) {
+    pub(crate) async fn cleanup_expired(&self) {
         let mut connections = self.connections.write().await;
         let before = connections.len();
         
@@ -406,15 +409,17 @@ impl LdapConnectionPool {
 }
 
 /// RAII guard for pooled connections
-pub struct PooledLdapGuard {
+#[allow(dead_code)]
+pub(crate) struct PooledLdapGuard {
     pool: Arc<LdapConnectionPool>,
     connection_id: u64,
     _permit: OwnedSemaphorePermit,
 }
 
+#[allow(dead_code)]
 impl PooledLdapGuard {
     /// Execute a search with the pooled connection
-    pub async fn search(
+    pub(crate) async fn search(
         &self,
         base: &str,
         scope: ldap3::Scope,
@@ -435,7 +440,7 @@ impl PooledLdapGuard {
     }
 
     /// Execute a paged search for large result sets
-    pub async fn paged_search(
+    pub(crate) async fn paged_search(
         &self,
         base: &str,
         scope: ldap3::Scope,

@@ -1,6 +1,3 @@
-// Allow unused code - error types for future error handling migration
-#![allow(dead_code)]
-
 //! Error handling module
 //!
 //! This module provides structured error types for the IRP application,
@@ -10,7 +7,7 @@ use thiserror::Error;
 
 /// Main error type for Active Directory operations
 #[derive(Error, Debug)]
-pub enum ADError {
+pub(crate) enum ADError {
     /// LDAP connection error
     #[error("LDAP connection failed: {0}")]
     ConnectionError(String),
@@ -133,7 +130,7 @@ impl From<serde_json::Error> for ADError {
 }
 
 /// Result type alias for AD operations
-pub type Result<T> = std::result::Result<T, ADError>;
+pub(crate) type Result<T> = std::result::Result<T, ADError>;
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,3 @@
-// Allow unused code - discovery utilities for future expansion
-#![allow(dead_code)]
-
 //! Domain Discovery Module
 //!
 //! Uses Windows native APIs to automatically discover:
@@ -9,11 +6,11 @@
 //! - Machine join status
 
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Result of domain discovery operation
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DiscoveredDomainInfo {
+pub(crate) struct DiscoveredDomainInfo {
     /// Whether the machine is joined to a domain
     pub is_domain_joined: bool,
     /// DNS domain name (e.g., "corp.example.com")
@@ -42,7 +39,8 @@ pub struct DiscoveredDomainInfo {
 
 /// Convert a DNS domain name to an LDAP base DN
 /// e.g., "corp.example.com" -> "DC=corp,DC=example,DC=com"
-pub fn domain_to_base_dn(domain: &str) -> String {
+#[allow(dead_code)]
+pub(crate) fn domain_to_base_dn(domain: &str) -> String {
     domain
         .split('.')
         .map(|part| format!("DC={}", part))
@@ -218,14 +216,15 @@ mod windows_impl {
         }
     }
 
-    /// Helper to convert PWSTR to String
+    /// Helper to convert PWSTR to String with bounded traversal
     fn pwstr_to_string(ptr: *const u16) -> Option<String> {
         if ptr.is_null() {
             return None;
         }
+        const MAX_LEN: usize = 4096; // Reasonable upper bound for domain strings
         unsafe {
             let mut len = 0;
-            while *ptr.add(len) != 0 {
+            while len < MAX_LEN && *ptr.add(len) != 0 {
                 len += 1;
             }
             if len == 0 {
@@ -252,7 +251,7 @@ mod windows_impl {
 use windows_impl::*;
 
 /// Perform comprehensive domain discovery
-pub fn discover_domain() -> DiscoveredDomainInfo {
+pub(crate) fn discover_domain() -> DiscoveredDomainInfo {
     info!("=== DOMAIN DISCOVERY ===");
     let mut info = DiscoveredDomainInfo::default();
 
@@ -357,7 +356,7 @@ pub fn discover_domain() -> DiscoveredDomainInfo {
 }
 
 /// Quick check if machine is domain-joined (without full discovery)
-pub fn check_domain_joined() -> bool {
+pub(crate) fn check_domain_joined() -> bool {
     #[cfg(windows)]
     {
         is_machine_domain_joined()

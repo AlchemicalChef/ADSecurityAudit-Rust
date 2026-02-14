@@ -1,6 +1,3 @@
-// Allow unused code - security utilities for future use
-#![allow(dead_code)]
-
 //! LDAP Utilities
 //!
 //! This module provides RFC 4515 and RFC 4514 compliant escaping functions
@@ -23,7 +20,7 @@
 /// let safe = escape_ldap_filter("admin*");
 /// assert_eq!(safe, "admin\\2a");
 /// ```
-pub fn escape_ldap_filter(input: &str) -> String {
+pub(crate) fn escape_ldap_filter(input: &str) -> String {
     input.chars().fold(String::new(), |mut acc, c| {
         match c {
             '*' => acc.push_str("\\2a"),
@@ -58,7 +55,8 @@ pub fn escape_ldap_filter(input: &str) -> String {
 /// let safe = escape_ldap_dn("Smith, John");
 /// assert_eq!(safe, "Smith\\, John");
 /// ```
-pub fn escape_ldap_dn(input: &str) -> String {
+#[allow(dead_code)]
+pub(crate) fn escape_ldap_dn(input: &str) -> String {
     if input.is_empty() {
         return String::new();
     }
@@ -108,7 +106,8 @@ pub fn escape_ldap_dn(input: &str) -> String {
 /// hyphens, underscores, and spaces. Returns `false` otherwise.
 ///
 /// This can be used as a pre-validation step before escaping.
-pub fn is_safe_ldap_value(input: &str) -> bool {
+#[allow(dead_code)]
+pub(crate) fn is_safe_ldap_value(input: &str) -> bool {
     input.chars().all(|c| {
         c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' || c == '.'
     })
@@ -122,7 +121,7 @@ use serde::{Deserialize, Serialize};
 
 /// Represents a Windows Security Descriptor (MS-DTYP 2.4.6)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityDescriptor {
+pub(crate) struct SecurityDescriptor {
     pub revision: u8,
     pub control_flags: u16,
     pub owner_sid: String,
@@ -133,7 +132,7 @@ pub struct SecurityDescriptor {
 
 /// Represents an Access Control Entry (ACE) in a DACL or SACL
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AceEntry {
+pub(crate) struct AceEntry {
     pub ace_type: u8,
     pub ace_flags: u8,
     pub access_mask: u32,
@@ -143,7 +142,7 @@ pub struct AceEntry {
 }
 
 /// ACE Type constants (MS-DTYP 2.4.4.1)
-pub mod ace_types {
+pub(crate) mod ace_types {
     pub const ACCESS_ALLOWED: u8 = 0x00;
     pub const ACCESS_DENIED: u8 = 0x01;
     pub const SYSTEM_AUDIT: u8 = 0x02;
@@ -171,7 +170,7 @@ pub mod ace_types {
 /// 12      4     SACL offset
 /// 16      4     DACL offset
 /// ```
-pub fn parse_security_descriptor(bytes: &[u8]) -> Result<SecurityDescriptor, String> {
+pub(crate) fn parse_security_descriptor(bytes: &[u8]) -> Result<SecurityDescriptor, String> {
     if bytes.len() < 20 {
         return Err("Security descriptor too short (minimum 20 bytes)".to_string());
     }
@@ -339,7 +338,7 @@ fn parse_ace(ace_type: u8, ace_flags: u8, data: &[u8]) -> Result<AceEntry, Strin
 /// 2       6     IdentifierAuthority
 /// 8       4*N   SubAuthorities (N = SubAuthorityCount)
 /// ```
-pub fn sid_to_string(bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn sid_to_string(bytes: &[u8]) -> Result<String, String> {
     if bytes.len() < 8 {
         return Err("SID too short (minimum 8 bytes)".to_string());
     }
@@ -383,6 +382,14 @@ pub fn sid_to_string(bytes: &[u8]) -> Result<String, String> {
     Ok(sid)
 }
 
+/// Parse a binary SID into its string representation, returning a placeholder on failure.
+///
+/// This is a convenience wrapper around [`sid_to_string`] for use cases where
+/// a fallback value is acceptable (e.g., collecting SID histories).
+pub(crate) fn parse_sid(bytes: &[u8]) -> String {
+    sid_to_string(bytes).unwrap_or_else(|_| format!("(invalid SID: {} bytes)", bytes.len()))
+}
+
 /// Convert a binary GUID to string format
 ///
 /// # Format (MS-DTYP 2.3.4.2):
@@ -390,7 +397,7 @@ pub fn sid_to_string(bytes: &[u8]) -> Result<String, String> {
 /// GUID = Data1(4) + Data2(2) + Data3(2) + Data4(8)
 /// String format: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
 /// ```
-pub fn guid_to_string(bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn guid_to_string(bytes: &[u8]) -> Result<String, String> {
     if bytes.len() < 16 {
         return Err("GUID too short (requires 16 bytes)".to_string());
     }

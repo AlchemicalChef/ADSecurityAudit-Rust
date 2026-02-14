@@ -1,31 +1,4 @@
-/**
- * Credential Prompt Component
- *
- * Secure credential entry dialog for Active Directory authentication.
- * Implements security best practices for credential handling.
- *
- * @module components/credential-prompt
- *
- * Features:
- * - Username/password entry with validation
- * - Password visibility toggle
- * - Remember credentials option (encrypted storage)
- * - Auto-fill from saved credentials
- * - Connection testing before save
- *
- * Security Measures:
- * - Password field never logged or displayed
- * - Credentials cleared from memory after use
- * - Encrypted storage using AES-256-GCM
- * - No credential transmission in plain text
- *
- * Credential Formats Supported:
- * - DOMAIN\\username (SAM format)
- * - username@domain.com (UPN format)
- * - Distinguished Name (DN)
- *
- * @see lib/tauri-api for credential validation
- */
+/** Credential Prompt -- secure credential entry dialog for AD authentication. */
 "use client"
 
 import type React from "react"
@@ -61,6 +34,7 @@ interface PasswordStrength {
   score: number
   label: string
   color: string
+  textColor: string
 }
 
 export function CredentialPrompt({
@@ -143,7 +117,7 @@ export function CredentialPrompt({
   }, [baseDn, validateBaseDn])
 
   const getPasswordStrength = (pwd: string): PasswordStrength => {
-    if (!pwd) return { score: 0, label: "", color: "" }
+    if (!pwd) return { score: 0, label: "", color: "", textColor: "" }
 
     let score = 0
     if (pwd.length >= 8) score++
@@ -153,9 +127,9 @@ export function CredentialPrompt({
     if (/[0-9]/.test(pwd)) score++
     if (/[^A-Za-z0-9]/.test(pwd)) score++
 
-    if (score <= 2) return { score, label: "Weak", color: "bg-destructive" }
-    if (score <= 4) return { score, label: "Medium", color: "bg-warning" }
-    return { score, label: "Strong", color: "bg-success" }
+    if (score <= 2) return { score, label: "Weak", color: "bg-destructive", textColor: "text-destructive" }
+    if (score <= 4) return { score, label: "Medium", color: "bg-warning", textColor: "text-warning" }
+    return { score, label: "Strong", color: "bg-success", textColor: "text-success" }
   }
 
   const passwordStrength = getPasswordStrength(password)
@@ -381,7 +355,7 @@ export function CredentialPrompt({
                     />
                   ))}
                 </div>
-                <p className={`text-xs ${passwordStrength.color.replace("bg-", "text-")}`}>
+                <p className={`text-xs ${passwordStrength.textColor}`}>
                   Password strength: {passwordStrength.label}
                 </p>
               </div>

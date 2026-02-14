@@ -3,8 +3,6 @@
 //! Detects dangerous Access Control Entries (ACEs) that could enable
 //! privilege escalation, persistence, and domain compromise attacks.
 //!
-// Allow unused code - permission GUID constants for security analysis
-#![allow(dead_code)]
 //!
 //! # Critical Checks Performed
 //!
@@ -60,10 +58,11 @@ use serde::{Deserialize, Serialize};
 use crate::common_types::Recommendation;
 
 /// Type alias for backward compatibility - use Recommendation from common_types
-pub type PermissionRecommendation = Recommendation;
+pub(crate) type PermissionRecommendation = Recommendation;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DangerousRight {
+#[allow(dead_code)]
+pub(crate) enum DangerousRight {
     GenericAll,
     WriteDacl,
     WriteOwner,
@@ -92,7 +91,7 @@ impl std::fmt::Display for DangerousRight {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PermissionEntry {
+pub(crate) struct PermissionEntry {
     pub identity_reference: String,
     pub identity_sid: String,
     pub object_dn: String,
@@ -107,7 +106,7 @@ pub struct PermissionEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PermissionFinding {
+pub(crate) struct PermissionFinding {
     pub category: String,
     pub issue: String,
     pub severity: String,
@@ -120,7 +119,7 @@ pub struct PermissionFinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PermissionDetails {
+pub(crate) struct PermissionDetails {
     pub object_dn: String,
     pub identity: String,
     pub identity_sid: String,
@@ -133,7 +132,7 @@ pub struct PermissionDetails {
 
 // Enterprise Key Admins specific check
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnterpriseKeyAdminsAnalysis {
+pub(crate) struct EnterpriseKeyAdminsAnalysis {
     pub exists: bool,
     pub group_dn: Option<String>,
     pub member_count: u32,
@@ -145,7 +144,7 @@ pub struct EnterpriseKeyAdminsAnalysis {
 
 // Critical OUs analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CriticalOuAnalysis {
+pub(crate) struct CriticalOuAnalysis {
     pub ou_dn: String,
     pub ou_name: String,
     pub dangerous_permissions: Vec<PermissionEntry>,
@@ -153,7 +152,7 @@ pub struct CriticalOuAnalysis {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PermissionsAudit {
+pub(crate) struct PermissionsAudit {
     pub total_dangerous_permissions: u32,
     pub critical_findings: u32,
     pub high_findings: u32,
@@ -168,14 +167,16 @@ pub struct PermissionsAudit {
 }
 
 // Well-known GUIDs
-pub const KEY_CREDENTIAL_LINK_GUID: &str = "5b47d60f-6090-40b2-9f37-2a4de88f3063";
-pub const DS_REPLICATION_GET_CHANGES: &str = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2";
-pub const DS_REPLICATION_GET_CHANGES_ALL: &str = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2";
+pub(crate) const KEY_CREDENTIAL_LINK_GUID: &str = "5b47d60f-6090-40b2-9f37-2a4de88f3063";
+#[allow(dead_code)]
+pub(crate) const DS_REPLICATION_GET_CHANGES: &str = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2";
+#[allow(dead_code)]
+pub(crate) const DS_REPLICATION_GET_CHANGES_ALL: &str = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2";
 
 // Well-known SIDs for filtering
-pub const SYSTEM_SID: &str = "S-1-5-18";
-pub const DOMAIN_ADMINS_RID: &str = "-512";
-pub const ENTERPRISE_ADMINS_RID: &str = "-519";
+pub(crate) const SYSTEM_SID: &str = "S-1-5-18";
+pub(crate) const DOMAIN_ADMINS_RID: &str = "-512";
+pub(crate) const ENTERPRISE_ADMINS_RID: &str = "-519";
 
 impl PermissionsAudit {
     pub fn new() -> Self {

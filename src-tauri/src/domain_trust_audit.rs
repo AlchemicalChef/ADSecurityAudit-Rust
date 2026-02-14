@@ -52,10 +52,10 @@ use serde::{Deserialize, Serialize};
 use crate::common_types::Recommendation;
 
 /// Type alias for backward compatibility - use Recommendation from common_types
-pub type TrustRecommendation = Recommendation;
+pub(crate) type TrustRecommendation = Recommendation;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TrustDirection {
+pub(crate) enum TrustDirection {
     Inbound,
     Outbound,
     Bidirectional,
@@ -72,7 +72,7 @@ impl std::fmt::Display for TrustDirection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TrustType {
+pub(crate) enum TrustType {
     External,
     Forest,
     ParentChild,
@@ -95,7 +95,7 @@ impl std::fmt::Display for TrustType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DomainTrust {
+pub(crate) struct DomainTrust {
     pub target_domain: String,
     pub source_domain: String,
     pub direction: TrustDirection,
@@ -109,7 +109,7 @@ pub struct DomainTrust {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrustFinding {
+pub(crate) struct TrustFinding {
     pub category: String,
     pub issue: String,
     pub severity: String,
@@ -122,7 +122,7 @@ pub struct TrustFinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrustDetails {
+pub(crate) struct TrustDetails {
     pub target: String,
     pub direction: String,
     pub trust_type: String,
@@ -134,7 +134,7 @@ pub struct TrustDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DomainTrustAudit {
+pub(crate) struct DomainTrustAudit {
     pub total_trusts: u32,
     pub inbound_trusts: u32,
     pub outbound_trusts: u32,
@@ -152,7 +152,7 @@ pub struct DomainTrustAudit {
 
 
 impl DomainTrustAudit {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             total_trusts: 0,
             inbound_trusts: 0,
@@ -170,7 +170,7 @@ impl DomainTrustAudit {
         }
     }
 
-    pub fn analyze_trust(&mut self, trust: &DomainTrust, local_domain: &str) {
+    pub(crate) fn analyze_trust(&mut self, trust: &DomainTrust, local_domain: &str) {
         self.total_trusts += 1;
         
         // Count by direction
@@ -314,7 +314,7 @@ impl DomainTrustAudit {
         }
     }
 
-    pub fn generate_recommendations(&mut self, local_domain: &str) {
+    pub(crate) fn generate_recommendations(&mut self, local_domain: &str) {
         let mut recommendations = Vec::new();
 
         if self.trusts_without_sid_filtering > 0 {

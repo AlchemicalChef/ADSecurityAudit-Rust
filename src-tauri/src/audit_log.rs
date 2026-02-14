@@ -7,8 +7,6 @@
 //! - Real-time alerting
 //! - Log export capabilities
 //!
-// Allow unused code - export/verify methods for compliance features
-#![allow(dead_code)]
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
@@ -26,7 +24,7 @@ use tracing::{info, error};
 /// - `Error`: Failed operations or security policy violations
 /// - `Critical`: Severe security incidents requiring immediate attention
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Severity {
+pub(crate) enum Severity {
     Info,
     Warning,
     Error,
@@ -69,7 +67,7 @@ impl Severity {
 /// - `Compliance`: Compliance-related activities
 /// - `SystemEvent`: Application lifecycle events
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Category {
+pub(crate) enum Category {
     Authentication,
     Authorization,
     UserManagement,
@@ -120,7 +118,7 @@ impl Category {
 
 /// Audit log entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuditEntry {
+pub(crate) struct AuditEntry {
     pub id: Option<i64>,
     pub timestamp: DateTime<Utc>,
     pub domain_id: Option<i64>,
@@ -138,7 +136,7 @@ pub struct AuditEntry {
 }
 
 impl AuditEntry {
-    pub fn new(
+    pub(crate) fn new(
         domain_id: Option<i64>,
         domain_name: Option<String>,
         category: Category,
@@ -166,17 +164,20 @@ impl AuditEntry {
         }
     }
 
-    pub fn with_details(mut self, details: String) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn with_details(mut self, details: String) -> Self {
         self.details = Some(details);
         self
     }
 
-    pub fn with_ip(mut self, ip: String) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn with_ip(mut self, ip: String) -> Self {
         self.ip_address = Some(ip);
         self
     }
 
-    pub fn with_session(mut self, session_id: String) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn with_session(mut self, session_id: String) -> Self {
         self.session_id = Some(session_id);
         self
     }
@@ -223,7 +224,7 @@ impl AuditEntry {
 
 /// Query filters for audit logs
 #[derive(Debug, Clone, Default)]
-pub struct AuditFilter {
+pub(crate) struct AuditFilter {
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
     pub domain_id: Option<i64>,
@@ -235,7 +236,7 @@ pub struct AuditFilter {
 
 /// Compliance report types
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum ComplianceStandard {
+pub(crate) enum ComplianceStandard {
     SOC2,
     HIPAA,
     PCIDSS,
@@ -244,21 +245,26 @@ pub enum ComplianceStandard {
 }
 
 /// Audit log manager with persistent storage
-pub struct AuditLogger {
+pub(crate) struct AuditLogger {
     db: Arc<Mutex<Connection>>,
+    #[allow(dead_code)]
     db_path: PathBuf,
 }
 
 impl AuditLogger {
     /// Create a new audit logger
-    pub fn new(db_path: Option<PathBuf>) -> Result<Self> {
-        let path = db_path.unwrap_or_else(|| {
-            let mut p = dirs::config_dir().expect("Failed to get config directory");
-            p.push("adsecurityscanner");
-            std::fs::create_dir_all(&p).ok();
-            p.push("audit_logs.db");
-            p
-        });
+    pub(crate) fn new(db_path: Option<PathBuf>) -> Result<Self> {
+        let path = match db_path {
+            Some(p) => p,
+            None => {
+                let mut p = dirs::config_dir()
+                    .ok_or_else(|| anyhow!("Cannot determine config directory for audit logs"))?;
+                p.push("adsecurityscanner");
+                std::fs::create_dir_all(&p).ok();
+                p.push("audit_logs.db");
+                p
+            }
+        };
 
         info!("Initializing audit logger at: {:?}", path);
 
@@ -345,11 +351,12 @@ impl AuditLogger {
     ///
     /// let id = logger.log(entry)?;
     /// ```
-    pub fn log(&self, mut entry: AuditEntry) -> Result<i64> {
+    pub(crate) fn log(&self, mut entry: AuditEntry) -> Result<i64> {
         // Generate tamper-evident checksum before storing
         entry.checksum = Some(entry.generate_checksum());
 
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock()
+            .map_err(|e| anyhow!("Failed to acquire audit log lock: {}", e))?;
 
         db.execute(
             "INSERT INTO audit_logs (
@@ -392,8 +399,9 @@ impl AuditLogger {
     }
 
     /// Query audit logs with filters
-    pub fn query(&self, filter: AuditFilter) -> Result<Vec<AuditEntry>> {
-        let db = self.db.lock().unwrap();
+    pub(crate) fn query(&self, filter: AuditFilter) -> Result<Vec<AuditEntry>> {
+        let db = self.db.lock()
+            .map_err(|e| anyhow!("Failed to acquire audit log lock: {}", e))?;
 
         let mut query = "SELECT * FROM audit_logs WHERE 1=1".to_string();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -479,7 +487,7 @@ impl AuditLogger {
     }
 
     /// Get audit statistics
-    pub fn get_statistics(&self, filter: AuditFilter) -> Result<AuditStatistics> {
+    pub(crate) fn get_statistics(&self, filter: AuditFilter) -> Result<AuditStatistics> {
         let entries = self.query(filter)?;
 
         let mut stats = AuditStatistics::default();
@@ -536,7 +544,7 @@ impl AuditLogger {
     /// println!("Total events: {}", report.total_events);
     /// println!("Critical findings: {}", report.critical_findings.len());
     /// ```
-    pub fn generate_compliance_report(
+    pub(crate) fn generate_compliance_report(
         &self,
         standard: ComplianceStandard,
         start_time: DateTime<Utc>,
@@ -652,7 +660,8 @@ impl AuditLogger {
     }
 
     /// Export audit logs to file
-    pub fn export_to_file(&self, filter: AuditFilter, path: PathBuf) -> Result<usize> {
+    #[allow(dead_code)]
+    pub(crate) fn export_to_file(&self, filter: AuditFilter, path: PathBuf) -> Result<usize> {
         let entries = self.query(filter)?;
         let json = serde_json::to_string_pretty(&entries)?;
         std::fs::write(&path, json)?;
@@ -661,7 +670,8 @@ impl AuditLogger {
     }
 
     /// Verify log integrity using checksums
-    pub fn verify_integrity(&self) -> Result<IntegrityReport> {
+    #[allow(dead_code)]
+    pub(crate) fn verify_integrity(&self) -> Result<IntegrityReport> {
         let all_entries = self.query(AuditFilter::default())?;
 
         let mut report = IntegrityReport {
@@ -684,7 +694,7 @@ impl AuditLogger {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AuditStatistics {
+pub(crate) struct AuditStatistics {
     pub total_events: usize,
     pub critical_count: usize,
     pub error_count: usize,
@@ -694,7 +704,7 @@ pub struct AuditStatistics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComplianceReport {
+pub(crate) struct ComplianceReport {
     pub standard: ComplianceStandard,
     pub period_start: DateTime<Utc>,
     pub period_end: DateTime<Utc>,
@@ -706,7 +716,8 @@ pub struct ComplianceReport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IntegrityReport {
+#[allow(dead_code)]
+pub(crate) struct IntegrityReport {
     pub total_entries: usize,
     pub verified: usize,
     pub tampered: Vec<i64>,

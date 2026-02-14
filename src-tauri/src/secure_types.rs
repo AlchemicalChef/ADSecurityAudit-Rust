@@ -1,6 +1,3 @@
-// Allow unused code - standard type methods for completeness
-#![allow(dead_code)]
-
 //! Secure Types Module
 //!
 //! This module provides secure credential storage types that automatically
@@ -16,7 +13,7 @@ use std::fmt;
 /// API keys, or tokens. The contents are automatically zeroed from memory
 /// when the value goes out of scope.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
-pub struct SecureString {
+pub(crate) struct SecureString {
     inner: Vec<u8>,
 }
 
@@ -25,14 +22,15 @@ impl SecureString {
     ///
     /// The original String is consumed and its contents are moved into
     /// the secure container.
-    pub fn new(s: String) -> Self {
+    pub(crate) fn new(s: String) -> Self {
         Self {
             inner: s.into_bytes(),
         }
     }
 
     /// Creates a new SecureString from a string slice.
-    pub fn from_str(s: &str) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_str(s: &str) -> Self {
         Self {
             inner: s.as_bytes().to_vec(),
         }
@@ -43,7 +41,7 @@ impl SecureString {
     /// # Security
     /// The returned reference should be used immediately and not stored.
     /// Avoid copying or cloning the exposed value.
-    pub fn expose_secret(&self) -> &str {
+    pub(crate) fn expose_secret(&self) -> &str {
         // Safe conversion - panics if invariant is violated (better than UB)
         // Since SecureString can only be constructed from String/&str (valid UTF-8),
         // this should never panic in practice
@@ -52,12 +50,14 @@ impl SecureString {
     }
 
     /// Returns the length of the secure string in bytes.
-    pub fn len(&self) -> usize {
+    #[allow(dead_code)]
+    pub(crate) fn len(&self) -> usize {
         self.inner.len()
     }
 
     /// Returns true if the secure string is empty.
-    pub fn is_empty(&self) -> bool {
+    #[allow(dead_code)]
+    pub(crate) fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 }
@@ -80,7 +80,7 @@ impl fmt::Display for SecureString {
 /// ensuring that the password is automatically zeroed from memory when
 /// the credentials are no longer needed.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
-pub struct Credentials {
+pub(crate) struct Credentials {
     /// Username (less sensitive, but still protected)
     username: String,
     /// Password (highly sensitive, automatically zeroed on drop)
@@ -89,7 +89,7 @@ pub struct Credentials {
 
 impl Credentials {
     /// Creates new credentials from username and password.
-    pub fn new(username: String, password: String) -> Self {
+    pub(crate) fn new(username: String, password: String) -> Self {
         Self {
             username,
             password: SecureString::new(password),
@@ -97,7 +97,7 @@ impl Credentials {
     }
 
     /// Returns a reference to the username.
-    pub fn username(&self) -> &str {
+    pub(crate) fn username(&self) -> &str {
         &self.username
     }
 
@@ -106,12 +106,13 @@ impl Credentials {
     /// # Security
     /// Use this method only when needed for authentication.
     /// Do not store or clone the returned reference.
-    pub fn password(&self) -> &str {
+    pub(crate) fn password(&self) -> &str {
         self.password.expose_secret()
     }
 
     /// Checks if the credentials are empty.
-    pub fn is_empty(&self) -> bool {
+    #[allow(dead_code)]
+    pub(crate) fn is_empty(&self) -> bool {
         self.username.is_empty() || self.password.is_empty()
     }
 }

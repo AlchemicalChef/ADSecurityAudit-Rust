@@ -1,39 +1,8 @@
-/**
- * Cache Statistics Monitor Component
- *
- * Real-time monitoring of the LDAP query cache performance to help
- * optimize query patterns and reduce AD server load.
- *
- * @module components/cache-statistics-monitor
- *
- * Metrics Displayed:
- * - Cache hit rate (percentage)
- * - Total hits and misses
- * - Cache size (entries and bytes)
- * - Eviction count
- * - Average entry age
- *
- * Cache Benefits:
- * - Reduces LDAP server load
- * - Speeds up repeated queries
- * - Enables offline browsing of cached data
- * - Reduces network traffic
- *
- * Configuration Options:
- * - TTL (Time To Live) per cache type
- * - Maximum cache size
- * - Cache invalidation triggers
- * - Warm-up strategies
- *
- * Performance Indicators:
- * - Green: >80% hit rate - excellent
- * - Yellow: 50-80% hit rate - good
- * - Red: <50% hit rate - consider adjustments
- */
+/** Cache Statistics Monitor -- real-time LDAP query cache performance metrics. */
 "use client"
 
-import { useState, useEffect } from "react"
-import { invoke } from "@tauri-apps/api/core"
+import { useState, useEffect, useCallback } from "react"
+import { invoke } from "@/lib/tauri-api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -53,7 +22,7 @@ export function CacheStatisticsMonitor({ isConnected }: CacheStatisticsMonitorPr
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
 
-  const fetchStatistics = async () => {
+  const fetchStatistics = useCallback(async () => {
     if (!isConnected) {
       setError("Not connected to Active Directory")
       return
@@ -70,7 +39,7 @@ export function CacheStatisticsMonitor({ isConnected }: CacheStatisticsMonitorPr
     } finally {
       setLoading(false)
     }
-  }
+  }, [isConnected])
 
   const enableWarming = async () => {
     try {
@@ -112,14 +81,14 @@ export function CacheStatisticsMonitor({ isConnected }: CacheStatisticsMonitorPr
     if (isConnected) {
       fetchStatistics()
     }
-  }, [isConnected])
+  }, [isConnected, fetchStatistics])
 
   useEffect(() => {
     if (autoRefresh && isConnected) {
       const interval = setInterval(fetchStatistics, 5000)
       return () => clearInterval(interval)
     }
-  }, [autoRefresh, isConnected])
+  }, [autoRefresh, isConnected, fetchStatistics])
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 B"

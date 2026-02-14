@@ -1,33 +1,4 @@
-/**
- * Group Policy Objects (GPO) Security Audit Component
- *
- * Analyzes Group Policy configurations for security best practices
- * and identifies potentially dangerous policy settings.
- *
- * @module components/gpo-audit
- *
- * Security Areas Analyzed:
- * - Password Policy: Complexity, length, history requirements
- * - Account Lockout: Thresholds and duration settings
- * - Audit Policy: Security event logging configuration
- * - User Rights: Privilege assignments (SeDebugPrivilege, etc.)
- * - Security Options: Kerberos, SMB, LDAP signing settings
- *
- * Critical Findings:
- * - Missing or weak password complexity requirements
- * - No account lockout policy
- * - Insufficient audit logging
- * - Dangerous user rights assignments
- * - Insecure protocol settings (SMB signing, LDAP signing)
- *
- * GPO Linking Analysis:
- * - Domain-level policies
- * - OU-level policy assignments
- * - Inheritance and enforcement status
- * - Policy application order
- *
- * @see https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-security-baselines
- */
+/** GPO Security Audit -- analyzes Group Policy configurations for security issues. */
 "use client"
 
 import { useState } from "react"
@@ -72,7 +43,6 @@ export function GpoAuditView({ isConnected }: GpoAuditViewProps) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       setError(errorMessage)
-      console.error("Failed to run GPO audit:", err)
     } finally {
       setLoading(false)
     }

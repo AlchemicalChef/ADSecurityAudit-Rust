@@ -1,8 +1,5 @@
-//! Parallel query execution for large-scale AD environments
-//! Provides efficient concurrent operations with progress tracking
-//!
-// Allow unused code - parallel execution features for future optimization
-#![allow(dead_code)]
+//! Parallel query execution for large-scale AD environments.
+//! Provides efficient concurrent operations with progress tracking.
 
 use anyhow::Result;
 use futures::future::join_all;
@@ -14,7 +11,8 @@ use tracing::{info, warn};
 
 /// Progress update for long-running operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProgressUpdate {
+#[allow(dead_code)]
+pub(crate) struct ProgressUpdate {
     pub operation: String,
     pub current: u32,
     pub total: u32,
@@ -25,17 +23,20 @@ pub struct ProgressUpdate {
 }
 
 /// A sender for progress updates to the UI
-pub type ProgressSender = mpsc::Sender<ProgressUpdate>;
-pub type ProgressReceiver = mpsc::Receiver<ProgressUpdate>;
+#[allow(dead_code)]
+pub(crate) type ProgressSender = mpsc::Sender<ProgressUpdate>;
+#[allow(dead_code)]
+pub(crate) type ProgressReceiver = mpsc::Receiver<ProgressUpdate>;
 
 /// Create a progress channel
-pub fn progress_channel(buffer: usize) -> (ProgressSender, ProgressReceiver) {
+#[allow(dead_code)]
+pub(crate) fn progress_channel(buffer: usize) -> (ProgressSender, ProgressReceiver) {
     mpsc::channel(buffer)
 }
 
 /// Execution statistics for performance monitoring
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ExecutionStats {
+pub(crate) struct ExecutionStats {
     pub total_operations: u32,
     pub successful: u32,
     pub failed: u32,
@@ -47,7 +48,7 @@ pub struct ExecutionStats {
 
 /// Configuration for parallel execution
 #[derive(Debug, Clone)]
-pub struct ParallelConfig {
+pub(crate) struct ParallelConfig {
     /// Maximum concurrent operations
     pub max_concurrency: usize,
     /// Timeout per operation
@@ -70,14 +71,14 @@ impl Default for ParallelConfig {
 }
 
 /// High-performance parallel executor for AD operations
-pub struct ParallelExecutor {
+pub(crate) struct ParallelExecutor {
     config: ParallelConfig,
     semaphore: Arc<Semaphore>,
     stats: RwLock<ExecutionStats>,
 }
 
 impl ParallelExecutor {
-    pub fn new(config: ParallelConfig) -> Self {
+    pub(crate) fn new(config: ParallelConfig) -> Self {
         let semaphore = Arc::new(Semaphore::new(config.max_concurrency));
         Self {
             config,
@@ -87,7 +88,8 @@ impl ParallelExecutor {
     }
 
     /// Execute multiple async operations in parallel with controlled concurrency
-    pub async fn execute_parallel<F, T, Fut>(
+    #[allow(dead_code)]
+    pub(crate) async fn execute_parallel<F, T, Fut>(
         &self,
         operations: Vec<F>,
         progress_tx: Option<ProgressSender>,
@@ -186,7 +188,8 @@ impl ParallelExecutor {
     }
 
     /// Execute operations in batches with progress reporting
-    pub async fn execute_batched<T, F, Fut>(
+    #[allow(dead_code)]
+    pub(crate) async fn execute_batched<T, F, Fut>(
         &self,
         items: Vec<T>,
         operation: F,
@@ -247,16 +250,19 @@ impl ParallelExecutor {
     }
 
     /// Get execution statistics
-    pub async fn stats(&self) -> ExecutionStats {
+    #[allow(dead_code)]
+    pub(crate) async fn stats(&self) -> ExecutionStats {
         self.stats.read().await.clone()
     }
 
     /// Reset statistics
-    pub async fn reset_stats(&self) {
+    #[allow(dead_code)]
+    pub(crate) async fn reset_stats(&self) {
         *self.stats.write().await = ExecutionStats::default();
     }
     
-    pub fn config(&self) -> &ParallelConfig {
+    #[allow(dead_code)]
+    pub(crate) fn config(&self) -> &ParallelConfig {
         &self.config
     }
 }

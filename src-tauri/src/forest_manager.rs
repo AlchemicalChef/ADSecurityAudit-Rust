@@ -3,8 +3,6 @@
 //! Manages multiple domain connections, coordinates forest-wide audits,
 //! and provides seamless domain switching capabilities.
 //!
-// Allow unused code - multi-domain features for future expansion
-#![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -20,7 +18,7 @@ use chrono::Utc;
 
 /// Domain connection status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ConnectionStatus {
+pub(crate) enum ConnectionStatus {
     Connected,
     Disconnected,
     Error(String),
@@ -28,7 +26,7 @@ pub enum ConnectionStatus {
 
 /// Information about a connected domain
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DomainInfo {
+pub(crate) struct DomainInfo {
     pub id: i64,
     pub name: String,
     pub server: String,
@@ -39,7 +37,7 @@ pub struct DomainInfo {
 }
 
 /// Manages multiple Active Directory domain connections
-pub struct ForestManager {
+pub(crate) struct ForestManager {
     /// Database for persistent storage
     database: Arc<Database>,
 
@@ -55,7 +53,7 @@ pub struct ForestManager {
 
 impl ForestManager {
     /// Create a new ForestManager
-    pub fn new(database: Arc<Database>) -> Self {
+    pub(crate) fn new(database: Arc<Database>) -> Self {
         Self {
             database,
             clients: RwLock::new(HashMap::new()),
@@ -65,7 +63,7 @@ impl ForestManager {
     }
 
     /// Clear all domain connections and data
-    pub async fn clear_all_domains(&self) {
+    pub(crate) async fn clear_all_domains(&self) {
         // Clear in-memory connections
         self.clients.write().await.clear();
         self.pools.write().await.clear();
@@ -80,7 +78,7 @@ impl ForestManager {
     }
 
     /// Initialize from database and restore active connection
-    pub async fn initialize(&self) -> Result<()> {
+    pub(crate) async fn initialize(&self) -> Result<()> {
         info!("Initializing ForestManager from database");
 
         // Load active domain from database
@@ -102,7 +100,7 @@ impl ForestManager {
     }
 
     /// Add a new domain configuration to the database
-    pub async fn add_domain(
+    pub(crate) async fn add_domain(
         &self,
         name: String,
         server: String,
@@ -140,7 +138,7 @@ impl ForestManager {
     }
 
     /// Connect to a domain by ID
-    pub async fn connect_domain(&self, domain_id: i64) -> Result<()> {
+    pub(crate) async fn connect_domain(&self, domain_id: i64) -> Result<()> {
         let domain_config = self.database.get_domain(domain_id)?
             .ok_or_else(|| anyhow!("Domain with ID {} not found", domain_id))?;
 
@@ -193,7 +191,7 @@ impl ForestManager {
     }
 
     /// Disconnect from a domain
-    pub async fn disconnect_domain(&self, domain_id: i64) -> Result<()> {
+    pub(crate) async fn disconnect_domain(&self, domain_id: i64) -> Result<()> {
         info!("Disconnecting from domain ID: {}", domain_id);
 
         self.clients.write().await.remove(&domain_id);
@@ -209,7 +207,8 @@ impl ForestManager {
     }
 
     /// Get the currently active domain client
-    pub async fn get_active_client(&self) -> Result<Arc<ActiveDirectoryClient>> {
+    #[allow(dead_code)]
+    pub(crate) async fn get_active_client(&self) -> Result<Arc<ActiveDirectoryClient>> {
         let active_id = self.active_domain_id.read().await
             .ok_or_else(|| anyhow!("No active domain connection"))?;
 
@@ -220,7 +219,7 @@ impl ForestManager {
     }
 
     /// Get the currently active domain pool
-    pub async fn get_active_pool(&self) -> Result<Arc<LdapConnectionPool>> {
+    pub(crate) async fn get_active_pool(&self) -> Result<Arc<LdapConnectionPool>> {
         let active_id = self.active_domain_id.read().await
             .ok_or_else(|| anyhow!("No active domain connection"))?;
 
@@ -231,7 +230,8 @@ impl ForestManager {
     }
 
     /// Get client for a specific domain
-    pub async fn get_client(&self, domain_id: i64) -> Result<Arc<ActiveDirectoryClient>> {
+    #[allow(dead_code)]
+    pub(crate) async fn get_client(&self, domain_id: i64) -> Result<Arc<ActiveDirectoryClient>> {
         self.clients.read().await
             .get(&domain_id)
             .cloned()
@@ -239,7 +239,8 @@ impl ForestManager {
     }
 
     /// Get pool for a specific domain
-    pub async fn get_pool(&self, domain_id: i64) -> Result<Arc<LdapConnectionPool>> {
+    #[allow(dead_code)]
+    pub(crate) async fn get_pool(&self, domain_id: i64) -> Result<Arc<LdapConnectionPool>> {
         self.pools.read().await
             .get(&domain_id)
             .cloned()
@@ -247,17 +248,17 @@ impl ForestManager {
     }
 
     /// Get all domain configurations from database
-    pub fn get_all_domains(&self) -> Result<Vec<DomainConfig>> {
+    pub(crate) fn get_all_domains(&self) -> Result<Vec<DomainConfig>> {
         self.database.get_all_domains()
     }
 
     /// Get a specific domain configuration by ID
-    pub fn get_domain_config(&self, domain_id: i64) -> Result<Option<DomainConfig>> {
+    pub(crate) fn get_domain_config(&self, domain_id: i64) -> Result<Option<DomainConfig>> {
         self.database.get_domain(domain_id)
     }
 
     /// Get domain information with connection status
-    pub async fn get_domains_info(&self) -> Result<Vec<DomainInfo>> {
+    pub(crate) async fn get_domains_info(&self) -> Result<Vec<DomainInfo>> {
         let configs = self.database.get_all_domains()?;
         let clients = self.clients.read().await;
         let active_id = *self.active_domain_id.read().await;
@@ -290,7 +291,7 @@ impl ForestManager {
     }
 
     /// Delete a domain configuration
-    pub async fn delete_domain(&self, domain_id: i64) -> Result<()> {
+    pub(crate) async fn delete_domain(&self, domain_id: i64) -> Result<()> {
         info!("Deleting domain ID: {}", domain_id);
 
         // Disconnect if connected
@@ -303,7 +304,8 @@ impl ForestManager {
     }
 
     /// Update domain configuration
-    pub async fn update_domain(
+    #[allow(dead_code)]
+    pub(crate) async fn update_domain(
         &self,
         domain_id: i64,
         name: Option<String>,
@@ -350,7 +352,7 @@ impl ForestManager {
     }
 
     /// Test connection to a domain without saving
-    pub async fn test_connection(
+    pub(crate) async fn test_connection(
         &self,
         server: String,
         username: String,
@@ -372,17 +374,19 @@ impl ForestManager {
     }
 
     /// Get the active domain ID
-    pub async fn get_active_domain_id(&self) -> Option<i64> {
+    pub(crate) async fn get_active_domain_id(&self) -> Option<i64> {
         *self.active_domain_id.read().await
     }
 
     /// Check if a domain is connected
-    pub async fn is_domain_connected(&self, domain_id: i64) -> bool {
+    #[allow(dead_code)]
+    pub(crate) async fn is_domain_connected(&self, domain_id: i64) -> bool {
         self.clients.read().await.contains_key(&domain_id)
     }
 
     /// Get count of connected domains
-    pub async fn connected_domains_count(&self) -> usize {
+    #[allow(dead_code)]
+    pub(crate) async fn connected_domains_count(&self) -> usize {
         self.clients.read().await.len()
     }
 }

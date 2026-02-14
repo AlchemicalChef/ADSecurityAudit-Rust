@@ -1,49 +1,12 @@
-/**
- * Active Directory Connection Component
- *
- * Manages LDAP/LDAPS connection state and provides connection status
- * display with reconnection capabilities.
- *
- * @module components/ad-connection
- *
- * Features:
- * - Connection status indicator (connected, disconnected, error)
- * - Server address and port display
- * - Active domain information
- * - Reconnect functionality
- * - Connection error details
- *
- * Connection States:
- * - Connected: Active LDAP session established
- * - Disconnected: No active session
- * - Error: Connection failed with error message
- *
- * Security Indicators:
- * - LDAPS (port 636) vs LDAP (port 389) detection
- * - TLS status display
- * - Bind DN information
- *
- * @see components/domain-selector for domain switching
- */
+/** AD Connection -- manages LDAP/LDAPS connection state, status display, and reconnection. */
 "use client"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { connectAD, validateCredentials, type ConnectionStatus } from "@/lib/tauri-api"
+import { connectAD, validateCredentials, invoke, type ConnectionStatus, type DomainInfo } from "@/lib/tauri-api"
 import { CredentialPrompt, type Credentials } from "@/components/credential-prompt"
 import { Server, CheckCircle, AlertCircle, Shield, Lock, Clock, RefreshCw, LogOut, Network, Database } from "lucide-react"
-import { invoke } from "@tauri-apps/api/core"
-
-interface DomainInfo {
-  id: number
-  name: string
-  server: string
-  base_dn: string
-  is_active: boolean
-  status: "Connected" | "Disconnected" | { Error: string }
-  last_connected: string | null
-}
 
 interface ADConnectionProps {
   isConnected: boolean
@@ -70,7 +33,7 @@ export function ADConnection({ isConnected, onConnectionChange }: ADConnectionPr
       const active = allDomains.find(d => d.is_active)
       setActiveDomain(active || null)
     } catch (err) {
-      console.error("Failed to load domains:", err)
+      // Domain loading failure is non-critical; UI shows empty state
     }
   }
 
@@ -78,27 +41,38 @@ export function ADConnection({ isConnected, onConnectionChange }: ADConnectionPr
     setError(null)
     setSuccess(null)
 
-    const validationResult = await validateCredentials(credentials.server, credentials.username, credentials.password)
+    try {
+      const validationResult = await validateCredentials(credentials.server, credentials.username, credentials.password)
 
-    if (!validationResult.valid) {
-      throw new Error(validationResult.error || "Invalid credentials")
+      if (!validationResult.valid) {
+        throw new Error(validationResult.error || "Invalid credentials")
+      }
+
+      const message = await connectAD(credentials.server, credentials.username, credentials.password, credentials.baseDn)
+
+      setSuccess(message)
+      setConnectionStatus({
+        connected: true,
+        server: credentials.server,
+        username: credentials.username,
+        baseDn: credentials.baseDn,
+        connectedAt: new Date().toISOString(),
+        useLdaps: credentials.useLdaps,
+      })
+      onConnectionChange(true, credentials)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Authentication failed"
+      setError(message)
+      throw err
     }
-
-    const message = await connectAD(credentials.server, credentials.username, credentials.password, credentials.baseDn)
-
-    setSuccess(message)
-    setConnectionStatus({
-      connected: true,
-      server: credentials.server,
-      username: credentials.username,
-      baseDn: credentials.baseDn,
-      connectedAt: new Date().toISOString(),
-      useLdaps: credentials.useLdaps,
-    })
-    onConnectionChange(true, credentials)
   }
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
+    try {
+      await invoke("disconnect_ad")
+    } catch (e) {
+      // Backend disconnect may not be implemented yet
+    }
     setConnectionStatus(null)
     setSuccess(null)
     setError(null)

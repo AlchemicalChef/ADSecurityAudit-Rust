@@ -45,7 +45,7 @@ use uuid::Uuid;
 ///
 /// Determines response urgency and escalation paths
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum IncidentPriority {
+pub(crate) enum IncidentPriority {
     Critical,
     High,
     Medium,
@@ -53,7 +53,7 @@ pub enum IncidentPriority {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum IncidentStatus {
+pub(crate) enum IncidentStatus {
     Open,
     Investigating,
     Contained,
@@ -62,7 +62,7 @@ pub enum IncidentStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IncidentAction {
+pub(crate) struct IncidentAction {
     pub id: String,
     pub action_type: String,
     pub description: String,
@@ -71,7 +71,7 @@ pub struct IncidentAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Incident {
+pub(crate) struct Incident {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -85,7 +85,7 @@ pub struct Incident {
 }
 
 impl Incident {
-    pub fn new(
+    pub(crate) fn new(
         title: String,
         description: String,
         priority: IncidentPriority,
@@ -106,12 +106,12 @@ impl Incident {
         }
     }
 
-    pub fn update_status(&mut self, status: IncidentStatus) {
+    pub(crate) fn update_status(&mut self, status: IncidentStatus) {
         self.status = status;
         self.updated_at = Utc::now();
     }
 
-    pub fn add_action(&mut self, action_type: String, description: String) {
+    pub(crate) fn add_action(&mut self, action_type: String, description: String) {
         let action = IncidentAction {
             id: Uuid::new_v4().to_string(),
             action_type,

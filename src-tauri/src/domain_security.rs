@@ -2,20 +2,17 @@
 //! Evaluates domain security settings including password policies, functional levels,
 //! legacy systems, Azure AD SSO, and AD Recycle Bin status.
 //!
-// Allow unused code - legacy OS patterns for future detection
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
 // Use shared FindingSeverity from common_types
 use crate::common_types::FindingSeverity;
 
 /// Type alias for backward compatibility - use FindingSeverity from common_types
-pub type Severity = FindingSeverity;
+pub(crate) type Severity = FindingSeverity;
 
 /// Security finding category
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FindingCategory {
+pub(crate) enum FindingCategory {
     DomainSecurity,
     PasswordPolicy,
     FunctionalLevel,
@@ -28,7 +25,7 @@ pub enum FindingCategory {
 
 /// A security finding from the audit
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityFinding {
+pub(crate) struct SecurityFinding {
     pub id: String,
     pub category: FindingCategory,
     pub issue: String,
@@ -70,7 +67,7 @@ impl SecurityFinding {
 
 /// Password policy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PasswordPolicy {
+pub(crate) struct PasswordPolicy {
     pub min_password_length: u32,
     pub password_history_count: u32,
     pub max_password_age_days: u32,
@@ -100,7 +97,7 @@ impl Default for PasswordPolicy {
 
 /// Domain functional level
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum FunctionalLevel {
+pub(crate) enum FunctionalLevel {
     Windows2000,
     Windows2003,
     Windows2008,
@@ -157,7 +154,7 @@ impl FunctionalLevel {
 
 /// Legacy computer detected in the domain
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LegacyComputer {
+pub(crate) struct LegacyComputer {
     pub name: String,
     pub distinguished_name: String,
     pub operating_system: String,
@@ -168,7 +165,7 @@ pub struct LegacyComputer {
 
 /// Azure AD SSO Account status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AzureSsoAccountStatus {
+pub(crate) struct AzureSsoAccountStatus {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub password_last_set: Option<String>,
@@ -179,7 +176,7 @@ pub struct AzureSsoAccountStatus {
 
 /// AD Optional Feature status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OptionalFeatureStatus {
+pub(crate) struct OptionalFeatureStatus {
     pub name: String,
     pub is_enabled: bool,
     pub enabled_scopes: Vec<String>,
@@ -187,7 +184,7 @@ pub struct OptionalFeatureStatus {
 
 /// Complete domain security audit result
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DomainSecurityAudit {
+pub(crate) struct DomainSecurityAudit {
     pub domain_name: String,
     pub domain_dns_root: String,
     pub domain_functional_level: String,
@@ -209,7 +206,7 @@ pub struct DomainSecurityAudit {
 }
 
 /// Evaluates password policy against security best practices
-pub fn evaluate_password_policy(policy: &PasswordPolicy, domain: &str) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_password_policy(policy: &PasswordPolicy, domain: &str) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     // Check minimum password length
@@ -363,7 +360,7 @@ pub fn evaluate_password_policy(policy: &PasswordPolicy, domain: &str) -> Vec<Se
 }
 
 /// Evaluates functional level security
-pub fn evaluate_functional_level(level: &FunctionalLevel, forest_level: &FunctionalLevel) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_functional_level(level: &FunctionalLevel, forest_level: &FunctionalLevel) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     if level.is_deprecated() {
@@ -409,7 +406,8 @@ pub fn evaluate_functional_level(level: &FunctionalLevel, forest_level: &Functio
 }
 
 /// Legacy operating systems to check for
-pub const LEGACY_OS_PATTERNS: &[&str] = &[
+#[allow(dead_code)]
+pub(crate) const LEGACY_OS_PATTERNS: &[&str] = &[
     "Windows XP",
     "Windows Vista",
     "Windows 7",
@@ -421,7 +419,7 @@ pub const LEGACY_OS_PATTERNS: &[&str] = &[
 ];
 
 /// Evaluates legacy computers in the domain
-pub fn evaluate_legacy_computers(computers: &[LegacyComputer]) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_legacy_computers(computers: &[LegacyComputer]) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     if !computers.is_empty() {
@@ -458,7 +456,7 @@ pub fn evaluate_legacy_computers(computers: &[LegacyComputer]) -> Vec<SecurityFi
 }
 
 /// Evaluates Azure AD SSO account status
-pub fn evaluate_azure_sso_accounts(accounts: &[AzureSsoAccountStatus]) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_azure_sso_accounts(accounts: &[AzureSsoAccountStatus]) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     for account in accounts {
@@ -484,7 +482,7 @@ pub fn evaluate_azure_sso_accounts(accounts: &[AzureSsoAccountStatus]) -> Vec<Se
 }
 
 /// Evaluates AD Recycle Bin status
-pub fn evaluate_recycle_bin(enabled: bool) -> Vec<SecurityFinding> {
+pub(crate) fn evaluate_recycle_bin(enabled: bool) -> Vec<SecurityFinding> {
     let mut findings = Vec::new();
 
     if !enabled {
@@ -507,7 +505,7 @@ pub fn evaluate_recycle_bin(enabled: bool) -> Vec<SecurityFinding> {
 }
 
 /// Calculates overall risk score from findings
-pub fn calculate_risk_score(findings: &[SecurityFinding]) -> (u32, String) {
+pub(crate) fn calculate_risk_score(findings: &[SecurityFinding]) -> (u32, String) {
     let mut score: u32 = 0;
     
     for finding in findings {

@@ -3,8 +3,6 @@
 //! The KRBTGT account is the most critical service account in Active Directory.
 //! It is used to encrypt and sign all Kerberos tickets (TGTs) in the domain.
 //!
-// Allow unused code - rotation wait constants for future validation
-#![allow(dead_code)]
 //!
 //! # Why KRBTGT Security Matters
 //!
@@ -60,7 +58,7 @@ use serde::{Deserialize, Serialize};
 
 /// KRBTGT account information and security status
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KrbtgtAccountInfo {
+pub(crate) struct KrbtgtAccountInfo {
     pub distinguished_name: String,
     pub sam_account_name: String,
     pub domain: String,
@@ -73,14 +71,14 @@ pub struct KrbtgtAccountInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountStatus {
+pub(crate) struct AccountStatus {
     pub is_enabled: bool,
     pub is_locked: bool,
     pub password_never_expires: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RotationInfo {
+pub(crate) struct RotationInfo {
     pub first_rotation_time: Option<String>,
     pub second_rotation_time: Option<String>,
     pub rotation_complete: bool,
@@ -88,7 +86,7 @@ pub struct RotationInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KrbtgtAgeAnalysis {
+pub(crate) struct KrbtgtAgeAnalysis {
     pub account_info: KrbtgtAccountInfo,
     pub age_days: i64,
     pub recommended_max_age_days: i64,
@@ -100,7 +98,7 @@ pub struct KrbtgtAgeAnalysis {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum KrbtgtRiskLevel {
+pub(crate) enum KrbtgtRiskLevel {
     Critical,
     High,
     Medium,
@@ -109,7 +107,7 @@ pub enum KrbtgtRiskLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AgeStatus {
+pub(crate) enum AgeStatus {
     Healthy,
     Approaching,
     Overdue,
@@ -117,7 +115,7 @@ pub enum AgeStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KrbtgtRecommendation {
+pub(crate) struct KrbtgtRecommendation {
     pub priority: KrbtgtRiskLevel,
     pub title: String,
     pub description: String,
@@ -125,14 +123,14 @@ pub struct KrbtgtRecommendation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RotationRequest {
+pub(crate) struct RotationRequest {
     pub rotation_number: u8, // 1 or 2
     pub confirm_understanding: bool,
     pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RotationResult {
+pub(crate) struct RotationResult {
     pub success: bool,
     pub rotation_number: u8,
     pub new_key_version: u32,
@@ -143,7 +141,7 @@ pub struct RotationResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct RotationStatus {
+pub(crate) struct RotationStatus {
     pub rotation_in_progress: bool,
     pub first_rotation_complete: bool,
     pub second_rotation_complete: bool,
@@ -159,10 +157,12 @@ pub struct RotationStatus {
 const RECOMMENDED_MAX_AGE_DAYS: i64 = 180; // 6 months
 const WARNING_THRESHOLD_DAYS: i64 = 150;
 const CRITICAL_THRESHOLD_DAYS: i64 = 365;
+#[allow(dead_code)]
 const MINIMUM_ROTATION_WAIT_HOURS: i64 = 10; // Minimum TGT lifetime
+#[allow(dead_code)]
 const RECOMMENDED_ROTATION_WAIT_HOURS: i64 = 24;
 
-pub fn analyze_krbtgt_age(account_info: &KrbtgtAccountInfo) -> KrbtgtAgeAnalysis {
+pub(crate) fn analyze_krbtgt_age(account_info: &KrbtgtAccountInfo) -> KrbtgtAgeAnalysis {
     let age_days = account_info.password_age_days;
     
     let (risk_level, age_status) = if age_days > CRITICAL_THRESHOLD_DAYS {
@@ -256,7 +256,8 @@ pub fn analyze_krbtgt_age(account_info: &KrbtgtAccountInfo) -> KrbtgtAgeAnalysis
     }
 }
 
-pub fn calculate_rotation_status(rotation_info: &Option<RotationInfo>) -> RotationStatus {
+#[allow(dead_code)]
+pub(crate) fn calculate_rotation_status(rotation_info: &Option<RotationInfo>) -> RotationStatus {
     match rotation_info {
         Some(info) => {
             let first_complete = info.first_rotation_time.is_some();
@@ -303,7 +304,7 @@ pub fn calculate_rotation_status(rotation_info: &Option<RotationInfo>) -> Rotati
     }
 }
 
-pub fn validate_rotation_request(
+pub(crate) fn validate_rotation_request(
     request: &RotationRequest,
     current_status: &RotationStatus,
 ) -> Result<()> {

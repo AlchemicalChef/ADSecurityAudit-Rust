@@ -1,30 +1,4 @@
-/**
- * AdminSDHolder Security Analysis Component
- *
- * Analyzes the security descriptor of the AdminSDHolder container and displays
- * Access Control Entries (ACEs) with risk assessment for each permission.
- *
- * @module components/adminsdholder-analysis
- *
- * AdminSDHolder Background:
- * The AdminSDHolder object in Active Directory serves as a template ACL for all
- * protected accounts. Every 60 minutes, the Security Descriptor Propagator (SDProp)
- * copies the AdminSDHolder's ACL to all protected accounts, overwriting any manual changes.
- *
- * Why This Matters:
- * - Misconfigurations here propagate to ALL protected accounts (Domain Admins, etc.)
- * - Attackers target AdminSDHolder for persistent privilege escalation
- * - Non-admin principals with write access can compromise the entire domain
- *
- * Risk Level Definitions:
- * - Critical: Full control, DCSync capability, or ownership rights
- * - High: Write permissions to sensitive attributes
- * - Medium: Ability to modify certain object properties
- * - Low: Extended read permissions beyond normal
- * - Info: Expected permissions for standard operations
- *
- * @see https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory
- */
+/** AdminSDHolder Analysis -- inspects ACEs on the AdminSDHolder container with risk assessment. */
 "use client"
 
 import { useState } from "react"

@@ -61,14 +61,14 @@ use serde::{Deserialize, Serialize};
 use crate::common_types::Recommendation;
 
 /// Type alias for backward compatibility - use Recommendation from common_types
-pub type GroupRecommendation = Recommendation;
+pub(crate) type GroupRecommendation = Recommendation;
 
 // ==========================================
 // Group Audit Types
 // ==========================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroupMember {
+pub(crate) struct GroupMember {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub object_class: String, // user, group, computer
@@ -77,7 +77,7 @@ pub struct GroupMember {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivilegedGroupInfo {
+pub(crate) struct PrivilegedGroupInfo {
     pub name: String,
     pub distinguished_name: String,
     pub member_count: u32,
@@ -90,7 +90,7 @@ pub struct PrivilegedGroupInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroupFinding {
+pub(crate) struct GroupFinding {
     pub category: String,
     pub issue: String,
     pub severity: String,
@@ -103,7 +103,7 @@ pub struct GroupFinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroupFindingDetails {
+pub(crate) struct GroupFindingDetails {
     pub group_dn: Option<String>,
     pub member_count: Option<u32>,
     pub threshold: Option<u32>,
@@ -114,7 +114,7 @@ pub struct GroupFindingDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroupAudit {
+pub(crate) struct GroupAudit {
     pub total_groups_scanned: u32,
     pub groups_with_issues: u32,
     pub excessive_membership_count: u32,
@@ -136,14 +136,14 @@ pub struct GroupAudit {
 // Constants
 // ==========================================
 
-pub const CRITICAL_GROUPS: [&str; 4] = [
+pub(crate) const CRITICAL_GROUPS: [&str; 4] = [
     "Domain Admins",
     "Enterprise Admins",
     "Schema Admins",
     "Administrators",
 ];
 
-pub const PROTECTED_GROUPS: [&str; 12] = [
+pub(crate) const PROTECTED_GROUPS: [&str; 12] = [
     "Domain Admins",
     "Enterprise Admins",
     "Schema Admins",
@@ -158,12 +158,12 @@ pub const PROTECTED_GROUPS: [&str; 12] = [
     "Key Admins",
 ];
 
-pub const THRESHOLD_CRITICAL_GROUP: u32 = 5;
-pub const THRESHOLD_STANDARD_GROUP: u32 = 15;
-pub const INACTIVE_DAYS_THRESHOLD: u32 = 90;
+pub(crate) const THRESHOLD_CRITICAL_GROUP: u32 = 5;
+pub(crate) const THRESHOLD_STANDARD_GROUP: u32 = 15;
+pub(crate) const INACTIVE_DAYS_THRESHOLD: u32 = 90;
 
 impl GroupAudit {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             total_groups_scanned: 0,
             groups_with_issues: 0,
@@ -183,7 +183,7 @@ impl GroupAudit {
         }
     }
 
-    pub fn analyze_group(
+    pub(crate) fn analyze_group(
         &mut self,
         group_name: &str,
         group_dn: &str,
@@ -385,7 +385,7 @@ impl GroupAudit {
         self.total_groups_scanned += 1;
     }
 
-    pub fn calculate_risk_score(&mut self) {
+    pub(crate) fn calculate_risk_score(&mut self) {
         let mut score = 0u32;
 
         score += self.critical_findings * 25;
@@ -396,7 +396,7 @@ impl GroupAudit {
         self.risk_score = score.min(100);
     }
 
-    pub fn generate_recommendations(&mut self) {
+    pub(crate) fn generate_recommendations(&mut self) {
         if self.excessive_membership_count > 0 {
             self.recommendations.push(Recommendation::new(
                 1,

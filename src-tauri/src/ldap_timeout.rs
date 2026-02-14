@@ -12,32 +12,38 @@ use tokio::time::timeout;
 use tracing::{info, error};
 
 /// Default connection timeout (15 seconds)
-pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+pub(crate) const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Default search timeout (30 seconds)
-pub const DEFAULT_SEARCH_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const DEFAULT_SEARCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Attempts to create an LDAP connection with a timeout.
 ///
 /// Wraps the blocking `LdapConn::with_settings()` in `spawn_blocking` with a timeout
 /// to prevent the async runtime from blocking indefinitely.
 ///
-/// TLS certificate verification is disabled for both LDAPS and plain LDAP to support
-/// enterprise environments with self-signed or internal CA certificates.
-pub async fn ldap_connect_with_timeout(
+/// TLS certificate verification can be disabled via `skip_tls_verify` for enterprise
+/// environments with self-signed or internal CA certificates. Defaults to verifying.
+pub(crate) async fn ldap_connect_with_timeout(
     url: &str,
     connect_timeout: Duration,
+) -> Result<LdapConn> {
+    ldap_connect_with_timeout_opts(url, connect_timeout, false).await
+}
+
+/// Attempts to create an LDAP connection with a timeout and TLS options.
+pub(crate) async fn ldap_connect_with_timeout_opts(
+    url: &str,
+    connect_timeout: Duration,
+    skip_tls_verify: bool,
 ) -> Result<LdapConn> {
     let url = url.to_string();
 
     let result = timeout(connect_timeout, async {
         tokio::task::spawn_blocking(move || {
-            // Configure connection settings
-            // Disable TLS cert verification to support enterprise environments
-            // with self-signed certificates or internal CAs
             let settings = LdapConnSettings::new()
                 .set_conn_timeout(connect_timeout)
-                .set_no_tls_verify(true);
+                .set_no_tls_verify(skip_tls_verify);
 
             LdapConn::with_settings(settings, &url)
         })
@@ -61,7 +67,7 @@ pub async fn ldap_connect_with_timeout(
 ///
 /// Takes ownership of the LdapConn to move it into the blocking task,
 /// then returns it after successful bind.
-pub async fn ldap_bind_with_timeout(
+pub(crate) async fn ldap_bind_with_timeout(
     ldap: LdapConn,
     username: &str,
     password: &str,
@@ -94,7 +100,7 @@ pub async fn ldap_bind_with_timeout(
 /// Unbinds from LDAP connection with a timeout.
 ///
 /// This is a quick operation but we still wrap it to be safe.
-pub async fn ldap_unbind_with_timeout(
+pub(crate) async fn ldap_unbind_with_timeout(
     ldap: LdapConn,
     unbind_timeout: Duration,
 ) -> Result<()> {
@@ -124,7 +130,7 @@ pub async fn ldap_unbind_with_timeout(
 /// to prevent indefinite hangs on slow or unresponsive servers.
 ///
 /// Handles sizeLimitExceeded (rc=4) gracefully by returning partial results.
-pub async fn ldap_search_with_timeout(
+pub(crate) async fn ldap_search_with_timeout(
     mut ldap: LdapConn,
     base_dn: &str,
     scope: Scope,
@@ -204,10 +210,10 @@ pub async fn ldap_search_with_timeout(
 }
 
 /// Default page size for paged searches
-pub const DEFAULT_PAGE_SIZE: i32 = 500;
+pub(crate) const DEFAULT_PAGE_SIZE: i32 = 500;
 
 /// Extended timeout for paged searches (2 minutes)
-pub const PAGED_SEARCH_TIMEOUT: Duration = Duration::from_secs(120);
+pub(crate) const PAGED_SEARCH_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Performs a paged LDAP search with timeout.
 ///
@@ -217,7 +223,7 @@ pub const PAGED_SEARCH_TIMEOUT: Duration = Duration::from_secs(120);
 ///
 /// This is essential for queries that may return more than 1000 results, as AD
 /// has a default size limit of 1000 entries per search.
-pub async fn ldap_paged_search_with_timeout(
+pub(crate) async fn ldap_paged_search_with_timeout(
     ldap: LdapConn,
     base_dn: &str,
     scope: Scope,

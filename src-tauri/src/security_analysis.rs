@@ -1,6 +1,3 @@
-// Allow unused code - analysis utilities for future expansion
-#![allow(dead_code)]
-
 //! Security Analysis Module for AdminSDHolder and ACL Auditing
 //!
 //! Provides comprehensive analysis of Windows Security Descriptors and Access Control Lists
@@ -46,7 +43,7 @@ use std::collections::HashMap;
 
 /// Represents an Access Control Entry (ACE) in a security descriptor
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccessControlEntry {
+pub(crate) struct AccessControlEntry {
     pub trustee: String,
     pub trustee_sid: String,
     pub access_mask: u32,
@@ -60,7 +57,7 @@ pub struct AccessControlEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum AceType {
+pub(crate) enum AceType {
     AccessAllowed,
     AccessDenied,
     AccessAllowedObject,
@@ -70,7 +67,7 @@ pub enum AceType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub enum RiskLevel {
+pub(crate) enum RiskLevel {
     Critical,
     High,
     Medium,
@@ -80,7 +77,7 @@ pub enum RiskLevel {
 
 /// AdminSDHolder analysis result
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdminSDHolderAnalysis {
+pub(crate) struct AdminSDHolderAnalysis {
     pub distinguished_name: String,
     pub owner: String,
     pub owner_sid: String,
@@ -96,7 +93,7 @@ pub struct AdminSDHolderAnalysis {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RiskSummary {
+pub(crate) struct RiskSummary {
     pub critical_count: usize,
     pub high_count: usize,
     pub medium_count: usize,
@@ -106,7 +103,7 @@ pub struct RiskSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityRecommendation {
+pub(crate) struct SecurityRecommendation {
     pub priority: RiskLevel,
     pub title: String,
     pub description: String,
@@ -115,7 +112,8 @@ pub struct SecurityRecommendation {
 }
 
 /// Known dangerous SIDs and their descriptions
-pub fn get_known_sids() -> HashMap<String, String> {
+#[allow(dead_code)]
+pub(crate) fn get_known_sids() -> HashMap<String, String> {
     let mut sids = HashMap::new();
     sids.insert("S-1-5-32-544".to_string(), "BUILTIN\\Administrators".to_string());
     sids.insert("S-1-5-32-548".to_string(), "BUILTIN\\Account Operators".to_string());
@@ -131,7 +129,7 @@ pub fn get_known_sids() -> HashMap<String, String> {
 }
 
 /// Dangerous permissions that could lead to privilege escalation
-pub fn get_dangerous_permissions() -> Vec<(&'static str, u32, RiskLevel, &'static str)> {
+pub(crate) fn get_dangerous_permissions() -> Vec<(&'static str, u32, RiskLevel, &'static str)> {
     vec![
         ("GenericAll", 0x10000000, RiskLevel::Critical, "Full control over object - can modify any attribute or take ownership"),
         ("WriteDacl", 0x00040000, RiskLevel::Critical, "Can modify permissions - could grant themselves full control"),
@@ -149,7 +147,7 @@ pub fn get_dangerous_permissions() -> Vec<(&'static str, u32, RiskLevel, &'stati
 }
 
 /// Dangerous object GUIDs for extended rights
-pub fn get_dangerous_extended_rights() -> HashMap<String, (&'static str, RiskLevel)> {
+pub(crate) fn get_dangerous_extended_rights() -> HashMap<String, (&'static str, RiskLevel)> {
     let mut rights = HashMap::new();
     rights.insert(
         "00299570-246d-11d0-a768-00aa006e0529".to_string(),
@@ -179,7 +177,7 @@ pub fn get_dangerous_extended_rights() -> HashMap<String, (&'static str, RiskLev
 }
 
 /// Trustees that should NOT have permissions on AdminSDHolder
-pub fn get_risky_trustees() -> Vec<(&'static str, RiskLevel, &'static str)> {
+pub(crate) fn get_risky_trustees() -> Vec<(&'static str, RiskLevel, &'static str)> {
     vec![
         ("Everyone", RiskLevel::Critical, "Universal group - any user would have these permissions"),
         ("Authenticated Users", RiskLevel::Critical, "Any authenticated user could exploit these permissions"),
@@ -195,7 +193,7 @@ pub fn get_risky_trustees() -> Vec<(&'static str, RiskLevel, &'static str)> {
 }
 
 /// Analyze an ACE for security risks
-pub fn analyze_ace(ace: &mut AccessControlEntry) {
+pub(crate) fn analyze_ace(ace: &mut AccessControlEntry) {
     let mut risk_reasons = Vec::new();
     let mut max_risk = RiskLevel::Info;
 
@@ -250,7 +248,7 @@ pub fn analyze_ace(ace: &mut AccessControlEntry) {
 }
 
 /// Generate recommendations based on analysis
-pub fn generate_recommendations(analysis: &AdminSDHolderAnalysis) -> Vec<SecurityRecommendation> {
+pub(crate) fn generate_recommendations(analysis: &AdminSDHolderAnalysis) -> Vec<SecurityRecommendation> {
     let mut recommendations = Vec::new();
 
     for ace in &analysis.dacl_entries {
@@ -336,7 +334,7 @@ pub fn generate_recommendations(analysis: &AdminSDHolderAnalysis) -> Vec<Securit
 }
 
 /// Calculate overall risk summary
-pub fn calculate_risk_summary(aces: &[AccessControlEntry]) -> RiskSummary {
+pub(crate) fn calculate_risk_summary(aces: &[AccessControlEntry]) -> RiskSummary {
     let mut critical = 0;
     let mut high = 0;
     let mut medium = 0;

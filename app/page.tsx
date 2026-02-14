@@ -32,7 +32,7 @@
  */
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardView } from "@/components/dashboard-view"
 import { UserManagement } from "@/components/user-management"
@@ -81,6 +81,16 @@ export default function Page() {
   const [isConnected, setIsConnected] = useState(false)
   const [savedCredentials, setSavedCredentials] = useState<Credentials | undefined>()
   const [activeTab, setActiveTab] = useState("dashboard")
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(["dashboard"]))
+
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev
+      const next = new Set(prev)
+      next.add(activeTab)
+      return next
+    })
+  }, [activeTab])
 
   const handleConnectionChange = (connected: boolean, credentials?: Credentials) => {
     setIsConnected(connected)
@@ -207,58 +217,58 @@ export default function Page() {
           <div className="h-[calc(100%-3rem)] overflow-auto relative">
             {/* Keep all tab contents mounted but only show active one */}
             <div className={`h-full p-6 ${activeTab === "dashboard" ? "block" : "hidden"}`}>
-              <DashboardView isConnected={isConnected} />
+              {visitedTabs.has("dashboard") && <DashboardView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "users" ? "block" : "hidden"}`}>
-              <UserManagement isConnected={isConnected} savedCredentials={savedCredentials} />
+              {visitedTabs.has("users") && <UserManagement isConnected={isConnected} savedCredentials={savedCredentials} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "privileged" ? "block" : "hidden"}`}>
-              <PrivilegedAccounts isConnected={isConnected} />
+              {visitedTabs.has("privileged") && <PrivilegedAccounts isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "groups" ? "block" : "hidden"}`}>
-              <GroupAuditView isConnected={isConnected} />
+              {visitedTabs.has("groups") && <GroupAuditView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "da-equiv" ? "block" : "hidden"}`}>
-              <DAEquivalenceAuditView isConnected={isConnected} />
+              {visitedTabs.has("da-equiv") && <DAEquivalenceAuditView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "domain-security" ? "block" : "hidden"}`}>
-              <DomainSecurityAuditView isConnected={isConnected} />
+              {visitedTabs.has("domain-security") && <DomainSecurityAuditView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "gpo-audit" ? "block" : "hidden"}`}>
-              <GpoAuditView isConnected={isConnected} />
+              {visitedTabs.has("gpo-audit") && <GpoAuditView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "delegation" ? "block" : "hidden"}`}>
-              <DelegationAuditView isConnected={isConnected} />
+              {visitedTabs.has("delegation") && <DelegationAuditView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "trusts" ? "block" : "hidden"}`}>
-              <DomainTrustAuditView isConnected={isConnected} />
+              {visitedTabs.has("trusts") && <DomainTrustAuditView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "permissions" ? "block" : "hidden"}`}>
-              <PermissionsAuditView isConnected={isConnected} />
+              {visitedTabs.has("permissions") && <PermissionsAuditView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "adminsdholder" ? "block" : "hidden"}`}>
-              <AdminSDHolderAnalysisView isConnected={isConnected} />
+              {visitedTabs.has("adminsdholder") && <AdminSDHolderAnalysisView isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "krbtgt" ? "block" : "hidden"}`}>
-              <KrbtgtManagement isConnected={isConnected} />
+              {visitedTabs.has("krbtgt") && <KrbtgtManagement isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "performance" ? "block" : "hidden"}`}>
-              <PerformanceMonitor isConnected={isConnected} />
+              {visitedTabs.has("performance") && <PerformanceMonitor isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "audit-logs" ? "block" : "hidden"}`}>
-              <AuditLogViewer isConnected={isConnected} />
+              {visitedTabs.has("audit-logs") && <AuditLogViewer isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "risk-scoring" ? "block" : "hidden"}`}>
-              <RiskScoringDashboard isConnected={isConnected} />
+              {visitedTabs.has("risk-scoring") && <RiskScoringDashboard isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "anomalies" ? "block" : "hidden"}`}>
-              <AnomalyDetectionPanel isConnected={isConnected} />
+              {visitedTabs.has("anomalies") && <AnomalyDetectionPanel isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "cache" ? "block" : "hidden"}`}>
-              <CacheStatisticsMonitor isConnected={isConnected} />
+              {visitedTabs.has("cache") && <CacheStatisticsMonitor isConnected={isConnected} />}
             </div>
             <div className={`h-full p-6 ${activeTab === "connection" ? "block" : "hidden"}`}>
-              <ADConnection isConnected={isConnected} onConnectionChange={handleConnectionChange} />
+              {visitedTabs.has("connection") && <ADConnection isConnected={isConnected} onConnectionChange={handleConnectionChange} />}
             </div>
           </div>
         </Tabs>

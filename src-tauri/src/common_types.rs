@@ -20,7 +20,7 @@ use std::fmt;
 /// Used by domain_security, infrastructure_audit, and other audit modules
 /// to classify the severity of discovered security issues.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub enum FindingSeverity {
+pub(crate) enum FindingSeverity {
     /// Lowest severity - informational only
     Informational,
     /// Low severity
@@ -73,7 +73,7 @@ impl fmt::Display for FindingSeverity {
 ///
 /// This consolidates account types from delegation_audit and privileged_accounts
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum AccountType {
+pub(crate) enum AccountType {
     /// Standard user account
     User,
     /// Service account (user account used for services)
@@ -100,6 +100,7 @@ impl fmt::Display for AccountType {
 
 impl AccountType {
     /// Check if this is a service-type account
+    #[allow(dead_code)]
     pub fn is_service_account(&self) -> bool {
         matches!(
             self,
@@ -119,7 +120,8 @@ impl AccountType {
 /// This provides a consistent structure for findings across all audit modules
 /// while allowing module-specific detail types.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Finding<T> {
+#[allow(dead_code)]
+pub(crate) struct Finding<T> {
     /// Unique identifier for this finding
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -145,7 +147,8 @@ pub struct Finding<T> {
 
 impl<T> Finding<T> {
     /// Create a new finding with the given parameters
-    pub fn new(
+    #[allow(dead_code)]
+    pub(crate) fn new(
         category: impl Into<String>,
         issue: impl Into<String>,
         severity: FindingSeverity,
@@ -171,7 +174,8 @@ impl<T> Finding<T> {
     }
 
     /// Create a new finding with a UUID
-    pub fn with_id(
+    #[allow(dead_code)]
+    pub(crate) fn with_id(
         category: impl Into<String>,
         issue: impl Into<String>,
         severity: FindingSeverity,
@@ -199,7 +203,7 @@ impl<T> Finding<T> {
 
 /// Counts of findings grouped by severity level
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeverityCounts {
+pub(crate) struct SeverityCounts {
     pub critical: u32,
     pub high: u32,
     pub medium: u32,
@@ -229,7 +233,7 @@ impl SeverityCounts {
 /// Common User Account Control (UAC) flag constants
 ///
 /// These are the standard UAC flags from Active Directory
-pub mod uac_flags {
+pub(crate) mod uac_flags {
     /// Account is disabled
     pub const ACCOUNTDISABLE: u32 = 0x0002;
     /// Account is locked out
@@ -254,7 +258,7 @@ pub mod uac_flags {
 
 /// Helper struct for parsing UserAccountControl flags
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct UserAccountControlFlags {
+pub(crate) struct UserAccountControlFlags {
     pub raw_value: u32,
     pub is_disabled: bool,
     pub is_locked: bool,
@@ -300,7 +304,7 @@ impl UserAccountControlFlags {
 /// let domain = extract_domain_from_dn(dn);
 /// assert_eq!(domain, "example.com");
 /// ```
-pub fn extract_domain_from_dn(dn: &str) -> String {
+pub(crate) fn extract_domain_from_dn(dn: &str) -> String {
     dn.split(',')
         .filter_map(|part| {
             let part = part.trim();
@@ -319,7 +323,7 @@ pub fn extract_domain_from_dn(dn: &str) -> String {
 /// This struct provides a consistent format for security recommendations
 /// across different audit types (delegation, group, permissions, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Recommendation {
+pub(crate) struct Recommendation {
     /// Priority level (1 = highest/critical, 4 = lowest/informational)
     pub priority: u8,
     /// Short title for the recommendation
@@ -338,7 +342,7 @@ pub struct Recommendation {
 
 impl Recommendation {
     /// Create a new recommendation without a command or reference
-    pub fn new(priority: u8, title: &str, description: &str, steps: Vec<String>) -> Self {
+    pub(crate) fn new(priority: u8, title: &str, description: &str, steps: Vec<String>) -> Self {
         Self {
             priority,
             title: title.to_string(),
@@ -362,6 +366,7 @@ impl Recommendation {
     }
 
     /// Create a new recommendation with a reference URL
+    #[allow(dead_code)]
     pub fn with_reference(priority: u8, title: &str, description: &str, steps: Vec<String>, reference: &str) -> Self {
         Self {
             priority,
@@ -379,7 +384,8 @@ impl Recommendation {
 // ==========================================
 
 /// Active Directory security-related constants and GUIDs
-pub mod security_constants {
+#[allow(dead_code)]
+pub(crate) mod security_constants {
     /// Well-known dangerous builtin groups with attack path descriptions
     ///
     /// These groups grant significant privileges that can lead to domain compromise
@@ -471,7 +477,7 @@ pub mod security_constants {
 
 /// Privilege tier levels based on Microsoft's tiered administration model
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum PrivilegeLevel {
+pub(crate) enum PrivilegeLevel {
     /// Domain/Forest Admin level - highest risk
     Tier0,
     /// Server Admin level
@@ -498,7 +504,7 @@ impl fmt::Display for PrivilegeLevel {
 
 /// Well-known privileged group types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum PrivilegedGroupType {
+pub(crate) enum PrivilegedGroupType {
     DomainAdmins,
     EnterpriseAdmins,
     SchemaAdmins,
@@ -518,7 +524,8 @@ pub enum PrivilegedGroupType {
 
 /// Privileged group definition with risk information
 #[derive(Debug, Clone)]
-pub struct PrivilegedGroupDefinition {
+#[allow(dead_code)]
+pub(crate) struct PrivilegedGroupDefinition {
     pub group_type: PrivilegedGroupType,
     pub name: &'static str,
     pub privilege_level: PrivilegeLevel,
@@ -528,7 +535,7 @@ pub struct PrivilegedGroupDefinition {
 }
 
 /// Get all privileged group definitions with risk scoring
-pub fn get_privileged_group_definitions() -> Vec<PrivilegedGroupDefinition> {
+pub(crate) fn get_privileged_group_definitions() -> Vec<PrivilegedGroupDefinition> {
     vec![
         PrivilegedGroupDefinition {
             group_type: PrivilegedGroupType::DomainAdmins,
@@ -646,14 +653,16 @@ pub fn get_privileged_group_definitions() -> Vec<PrivilegedGroupDefinition> {
 }
 
 /// Check if a principal name is a known legitimate high-privilege principal
-pub fn is_legitimate_principal(principal: &str) -> bool {
+#[allow(dead_code)]
+pub(crate) fn is_legitimate_principal(principal: &str) -> bool {
     let lower = principal.to_lowercase();
     security_constants::LEGITIMATE_PRINCIPALS.iter()
         .any(|p| lower.contains(&p.to_lowercase()))
 }
 
 /// Check if a RID indicates a privileged account
-pub fn is_privileged_rid(rid: &str) -> bool {
+#[allow(dead_code)]
+pub(crate) fn is_privileged_rid(rid: &str) -> bool {
     security_constants::PRIVILEGED_RIDS.contains(&rid)
 }
 

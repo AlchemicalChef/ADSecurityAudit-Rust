@@ -10,7 +10,8 @@ use crate::common_types::UserAccountControlFlags;
 ///
 /// Provides convenient methods to extract common attribute types
 /// without repeating the verbose `.get().and_then().cloned().unwrap_or_default()` pattern.
-pub trait SearchEntryExt {
+#[allow(dead_code)]
+pub(crate) trait SearchEntryExt {
     /// Get a string attribute, returning empty string if not found
     fn get_string_attr(&self, name: &str) -> String;
 
@@ -153,7 +154,8 @@ impl SearchEntryExt for SearchEntry {
 ///
 /// These are the most frequently used attribute names in AD queries.
 /// Using constants prevents typos and enables IDE completion.
-pub mod attrs {
+#[allow(dead_code)]
+pub(crate) mod attrs {
     // Identity attributes
     pub const DISTINGUISHED_NAME: &str = "distinguishedName";
     pub const SAM_ACCOUNT_NAME: &str = "sAMAccountName";
@@ -211,7 +213,8 @@ pub mod attrs {
 }
 
 /// Common LDAP filter patterns
-pub mod filters {
+#[allow(dead_code)]
+pub(crate) mod filters {
     /// All users (person objects)
     pub const ALL_USERS: &str = "(&(objectClass=user)(objectCategory=person))";
 
@@ -241,7 +244,8 @@ pub mod filters {
 }
 
 /// Standard attribute lists for common query types
-pub mod attr_lists {
+#[allow(dead_code)]
+pub(crate) mod attr_lists {
     /// Basic user attributes for listing
     pub const USER_BASIC: &[&str] = &[
         "distinguishedName",

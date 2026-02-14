@@ -1,42 +1,8 @@
-/**
- * Risk Scoring Dashboard Component
- *
- * Calculates and displays an aggregate security risk score for the
- * Active Directory environment based on multiple audit findings.
- *
- * @module components/risk-scoring-dashboard
- *
- * Scoring Categories:
- * - Privileged Access: Group membership, admin accounts, delegation
- * - Authentication Security: KRBTGT age, password policies, Kerberos config
- * - Object Permissions: ACLs, AdminSDHolder, critical object security
- * - Infrastructure: GPOs, trusts, DNS, Certificate Services
- * - Operational Hygiene: Stale accounts, audit logging, monitoring
- *
- * Risk Levels:
- * - 0-20: Low Risk (Green) - Excellent security posture
- * - 21-40: Moderate (Yellow) - Some improvements recommended
- * - 41-60: Elevated (Orange) - Significant issues to address
- * - 61-80: High Risk (Red) - Critical vulnerabilities present
- * - 81-100: Critical (Dark Red) - Immediate action required
- *
- * Score Components:
- * - Each finding type contributes weighted points
- * - Critical findings: 25 points each
- * - High findings: 15 points each
- * - Medium findings: 5 points each
- * - Low findings: 2 points each
- *
- * Visualizations:
- * - Overall score gauge
- * - Category breakdown chart
- * - Trend over time graph
- * - Top findings by impact
- */
+/** Risk Scoring Dashboard -- aggregate security risk score with category breakdown and trend charts. */
 "use client"
 
 import { useState } from "react"
-import { invoke } from "@tauri-apps/api/core"
+import { invoke } from "@/lib/tauri-api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

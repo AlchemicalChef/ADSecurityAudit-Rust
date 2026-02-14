@@ -1,40 +1,8 @@
-/**
- * Anomaly Detection Panel Component
- *
- * Displays behavioral anomalies detected by the machine learning-inspired
- * analytics engine, providing real-time security monitoring.
- *
- * @module components/anomaly-detection-panel
- *
- * Anomaly Types Displayed:
- * - UnusualLogonTime: Activity outside normal hours
- * - UnusualLogonLocation: Access from atypical IPs
- * - PrivilegeEscalation: Addition to privileged groups
- * - MassGroupChange: Bulk membership modifications
- * - RapidFireLogons: Potential credential stuffing
- * - SuspiciousQuery: Unusual LDAP query patterns
- * - ConfigurationChange: Unexpected AD modifications
- * - BruteForceAttempt: Multiple failed authentications
- * - LateralMovement: Cross-system access patterns
- *
- * Severity Levels:
- * - Critical: Likely security incident, immediate action required
- * - High: Suspicious activity requiring prompt investigation
- * - Medium: Unusual behavior warranting review
- * - Low: Informational, routine monitoring
- *
- * Features:
- * - Real-time anomaly feed with filtering
- * - Confidence scores and deviation metrics
- * - Evidence details for each detection
- * - Recommended response actions
- *
- * @see https://docs.microsoft.com/en-us/defender-for-identity/suspicious-activity-guide
- */
+/** Anomaly Detection Panel -- displays behavioral anomalies with severity filtering and response actions. */
 "use client"
 
 import { useState, useEffect } from "react"
-import { invoke } from "@tauri-apps/api/core"
+import { invoke } from "@/lib/tauri-api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

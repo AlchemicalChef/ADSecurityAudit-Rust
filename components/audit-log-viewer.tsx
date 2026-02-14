@@ -1,45 +1,8 @@
-/**
- * Audit Log Viewer Component
- *
- * Displays security audit logs with filtering, searching, and export
- * capabilities for compliance and forensic analysis.
- *
- * @module components/audit-log-viewer
- *
- * Log Entry Types:
- * - User searches and queries
- * - Security scans and audits
- * - Account modifications (disable, etc.)
- * - KRBTGT rotation events
- * - Connection events
- * - Configuration changes
- *
- * Severity Levels:
- * - Info: Normal operations
- * - Warning: Unusual but expected events
- * - Error: Operation failures
- * - Critical: Security incidents
- *
- * Features:
- * - Real-time log streaming
- * - Date range filtering
- * - Severity level filtering
- * - Full-text search
- * - Log entry details view
- * - Export to CSV/JSON
- *
- * Compliance Support:
- * - Tamper-evident logging (SHA-256 chain)
- * - Timestamp with timezone
- * - User attribution
- * - Operation context preservation
- *
- * @see https://docs.microsoft.com/en-us/windows/security/threat-protection/auditing/security-auditing-overview
- */
+/** Audit Log Viewer -- displays security audit logs with filtering, search, and compliance reporting. */
 "use client"
 
 import { useState, useEffect } from "react"
-import { invoke } from "@tauri-apps/api/core"
+import { invoke } from "@/lib/tauri-api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -109,7 +72,7 @@ export function AuditLogViewer({ isConnected }: AuditLogViewerProps) {
     setError(null)
 
     try {
-      const params: any = {}
+      const params: Record<string, string> = {}
       if (startDate) params.startTime = new Date(startDate).toISOString()
       if (endDate) params.endTime = new Date(endDate).toISOString()
       if (categoryFilter !== "all") params.category = categoryFilter
@@ -128,14 +91,14 @@ export function AuditLogViewer({ isConnected }: AuditLogViewerProps) {
     if (!isConnected) return
 
     try {
-      const params: any = {}
+      const params: Record<string, string> = {}
       if (startDate) params.startTime = new Date(startDate).toISOString()
       if (endDate) params.endTime = new Date(endDate).toISOString()
 
       const result = await invoke<AuditStatistics>("get_audit_statistics", params)
       setStatistics(result)
     } catch (err) {
-      console.error("Failed to fetch statistics:", err)
+      // Statistics fetch failure is non-critical
     }
   }
 

@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Server, ChevronDown, Plus, Trash2, CheckCircle, Circle, AlertCircle, Wand2, Loader2 } from "lucide-react"
-import { invoke } from "@tauri-apps/api/core"
+import { invoke, type DomainInfo } from "@/lib/tauri-api"
 
 interface DiscoveredDomainInfo {
   is_domain_joined: boolean
@@ -36,16 +36,6 @@ interface DiscoveredDomainInfo {
   suggested_base_dn: string | null
   suggested_server: string | null
   warnings: string[]
-}
-
-interface DomainInfo {
-  id: number
-  name: string
-  server: string
-  base_dn: string
-  is_active: boolean
-  status: "Connected" | "Disconnected" | { Error: string }
-  last_connected: string | null
 }
 
 interface AddDomainForm {
@@ -95,7 +85,7 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
         }
       }
     } catch (err) {
-      console.error("Failed to check discovery prompt:", err)
+      // Discovery prompt check is non-critical
     }
   }
 
@@ -126,7 +116,6 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
       }
     } catch (err) {
       setError(`Discovery failed: ${err}`)
-      console.error("Domain discovery failed:", err)
     } finally {
       setDiscovering(false)
     }
@@ -140,7 +129,7 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
       const active = allDomains.find(d => d.is_active)
       setActiveDomain(active || null)
     } catch (err) {
-      console.error("Failed to load domains:", err)
+      // Domain loading failure is non-critical; UI shows empty state
     }
   }
 
@@ -154,7 +143,6 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
       onConnectionChange?.(true)
     } catch (err) {
       setError(err as string)
-      console.error("Failed to switch domain:", err)
       onConnectionChange?.(false)
     } finally {
       setLoading(false)
@@ -210,7 +198,6 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
       onConnectionChange?.(true)
     } catch (err) {
       setError(err as string)
-      console.error("Failed to add domain:", err)
       onConnectionChange?.(false)
     } finally {
       setLoading(false)
@@ -227,7 +214,6 @@ export function DomainSelector({ onConnectionChange }: DomainSelectorProps) {
       await loadDomains()
     } catch (err) {
       setError(err as string)
-      console.error("Failed to delete domain:", err)
     }
   }
 

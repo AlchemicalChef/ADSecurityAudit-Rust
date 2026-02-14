@@ -50,16 +50,17 @@
 use serde::{Deserialize, Serialize};
 
 // Use shared types from common_types
-pub use crate::common_types::{AccountType, Recommendation};
+pub(crate) use crate::common_types::{AccountType, Recommendation};
 
 /// Type alias for backward compatibility - use Recommendation from common_types
-pub type DelegationRecommendation = Recommendation;
+pub(crate) type DelegationRecommendation = Recommendation;
 
 /// Type alias for backward compatibility - use AccountType from common_types
-pub type DelegationAccountType = AccountType;
+#[allow(dead_code)]
+pub(crate) type DelegationAccountType = AccountType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DelegationType {
+pub(crate) enum DelegationType {
     Unconstrained,
     Constrained,
     ConstrainedWithProtocolTransition,
@@ -80,7 +81,7 @@ impl std::fmt::Display for DelegationType {
 // Note: AccountType is now imported from common_types and re-exported as DelegationAccountType
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DelegationEntry {
+pub(crate) struct DelegationEntry {
     pub sam_account_name: String,
     pub distinguished_name: String,
     pub account_type: AccountType,
@@ -94,7 +95,7 @@ pub struct DelegationEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DelegationFinding {
+pub(crate) struct DelegationFinding {
     pub category: String,
     pub issue: String,
     pub severity: String,
@@ -109,7 +110,7 @@ pub struct DelegationFinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DelegationDetails {
+pub(crate) struct DelegationDetails {
     pub distinguished_name: String,
     pub allowed_to_delegate_to: Vec<String>,
     pub trusted_to_auth_for_delegation: bool,
@@ -119,7 +120,7 @@ pub struct DelegationDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DelegationAudit {
+pub(crate) struct DelegationAudit {
     pub total_delegations: u32,
     pub unconstrained_count: u32,
     pub constrained_count: u32,
@@ -135,7 +136,7 @@ pub struct DelegationAudit {
 }
 
 impl DelegationAudit {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             total_delegations: 0,
             unconstrained_count: 0,
@@ -152,7 +153,7 @@ impl DelegationAudit {
         }
     }
 
-    pub fn analyze_user_constrained_delegation(&mut self, entry: &DelegationEntry) {
+    pub(crate) fn analyze_user_constrained_delegation(&mut self, entry: &DelegationEntry) {
         if entry.trusted_to_auth_for_delegation {
             // Protocol Transition (T2A4D) - CRITICAL
             let finding = DelegationFinding {
@@ -216,7 +217,7 @@ impl DelegationAudit {
         self.user_account_delegations += 1;
     }
 
-    pub fn analyze_computer_constrained_delegation(&mut self, entry: &DelegationEntry) {
+    pub(crate) fn analyze_computer_constrained_delegation(&mut self, entry: &DelegationEntry) {
         if entry.trusted_to_auth_for_delegation {
             // Computer with Protocol Transition - HIGH
             let finding = DelegationFinding {
@@ -252,7 +253,7 @@ impl DelegationAudit {
         self.computer_account_delegations += 1;
     }
 
-    pub fn analyze_unconstrained_delegation(&mut self, entry: &DelegationEntry) {
+    pub(crate) fn analyze_unconstrained_delegation(&mut self, entry: &DelegationEntry) {
         let severity = match entry.account_type {
             AccountType::User => ("Critical", 4, 50),
             AccountType::Computer => ("High", 3, 30),
@@ -287,7 +288,7 @@ impl DelegationAudit {
         self.risk_score += severity.2;
     }
 
-    pub fn analyze_rbcd(&mut self, entry: &DelegationEntry) {
+    pub(crate) fn analyze_rbcd(&mut self, entry: &DelegationEntry) {
         let finding = DelegationFinding {
             category: "Kerberos Delegation".to_string(),
             issue: "Resource-Based Constrained Delegation Configured".to_string(),
@@ -316,7 +317,7 @@ impl DelegationAudit {
         self.risk_score += 15;
     }
 
-    pub fn generate_recommendations(&mut self) {
+    pub(crate) fn generate_recommendations(&mut self) {
         let mut recommendations = Vec::new();
 
         if self.unconstrained_count > 0 {

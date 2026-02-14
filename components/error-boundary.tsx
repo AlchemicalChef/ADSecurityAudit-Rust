@@ -1,33 +1,7 @@
-/**
- * Error Boundary Component
- *
- * React error boundary that catches JavaScript errors anywhere in the
- * child component tree and displays a fallback UI instead of crashing.
- *
- * @module components/error-boundary
- *
- * Features:
- * - Catches render errors in child components
- * - Displays user-friendly error message
- * - Provides retry/refresh options
- * - Error details expansion for debugging
- * - Dismiss capability for non-critical errors
- *
- * Error Information Captured:
- * - Error message and stack trace
- * - Component stack (React component hierarchy)
- * - Timestamp of error occurrence
- *
- * Recovery Options:
- * - Retry: Re-renders the failed component
- * - Refresh: Full page reload
- * - Dismiss: Hides error (if non-critical)
- *
- * @see https://reactjs.org/docs/error-boundaries.html
- */
+/** Error Boundary -- catches React render errors and displays a fallback UI with retry/dismiss options. */
 'use client'
 
-import React, { Component, ReactNode } from 'react'
+import React, { Component, type ReactNode } from 'react'
 import { AlertTriangle, X, RefreshCw } from 'lucide-react'
 
 interface Props {
@@ -54,10 +28,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidUpdate(prevProps: Props, prevState: State) {
     // If a new different error occurred, reset dismissed state
-    if (this.state.error && this.state.error.message !== this.state.lastErrorMessage) {
+    const currentMessage = this.state.error?.message ?? null
+    const lastMessage = this.state.lastErrorMessage ?? null
+    if (this.state.error && currentMessage !== null && currentMessage !== lastMessage) {
       this.setState({
         dismissed: false,
-        lastErrorMessage: this.state.error.message
+        lastErrorMessage: currentMessage
       })
     }
   }
